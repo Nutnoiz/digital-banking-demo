@@ -1,0 +1,130 @@
+<div class="page">
+
+  <header class="header">
+
+    <div>
+      <h1>My Accounts</h1>
+
+      <p>
+        View your bank accounts and balances.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      class="transfer-button"
+      (click)="goToTransfer()"
+    >
+      Transfer Money
+    </button>
+
+  </header>
+
+
+  @if (loading) {
+
+    <div class="loading">
+      Loading accounts...
+    </div>
+
+  }
+
+
+  @if (errorMessage) {
+
+    <div class="error">
+      {{ errorMessage }}
+    </div>
+
+  }
+
+
+  @if (!loading && !errorMessage) {
+
+    @if (accounts.length === 0) {
+
+      <div class="empty">
+        No accounts found.
+      </div>
+
+    }
+
+
+    @if (accounts.length > 0) {
+
+      <section class="accounts-grid">
+
+        @for (
+          account of accounts;
+          track account.id
+        ) {
+
+          <article class="account-card">
+
+            <div class="account-header">
+
+              <div>
+
+                <div class="account-type">
+                  {{ account.accountType }}
+                </div>
+
+                <div class="account-number">
+                  {{ account.accountNo }}
+                </div>
+
+              </div>
+
+              <span class="account-status">
+                {{ account.status }}
+              </span>
+
+            </div>
+
+
+            <div class="customer-name">
+              {{ account.customerName }}
+            </div>
+
+
+            <div class="balance-section">
+
+              <div class="balance-label">
+                Available Balance
+              </div>
+
+              <div class="balance">
+
+                {{ account.balance | number:'1.2-2' }}
+
+                {{ account.currency }}
+
+              </div>
+
+            </div>
+
+
+            <div class="account-actions">
+
+              <button
+                type="button"
+                class="transaction-button"
+                (click)="viewTransactions(account.id)"
+              >
+                View Transactions
+              </button>
+
+            </div>
+
+          </article>
+
+        }
+
+      </section>
+
+    }
+
+  }
+
+
+</div>

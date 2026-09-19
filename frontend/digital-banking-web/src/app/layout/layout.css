@@ -1,0 +1,148 @@
+.app-shell {
+  min-height: 100vh;
+  background: #f6f7f9;
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+
+  border-bottom: 1px solid #ddd;
+
+  background: white;
+}
+
+.navbar-inner {
+  max-width: 1200px;
+
+  min-height: 64px;
+
+  margin: 0 auto;
+
+  padding: 0 24px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 32px;
+}
+
+.brand {
+  flex-shrink: 0;
+
+  color: #222;
+
+  font-size: 19px;
+
+  font-weight: 700;
+
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+
+  flex: 1;
+}
+
+.nav-links a {
+  padding: 9px 13px;
+
+  border-radius: 7px;
+
+  color: #555;
+
+  font-size: 14px;
+
+  text-decoration: none;
+}
+
+.nav-links a:hover {
+  background: #f1f1f1;
+
+  color: #222;
+}
+
+.nav-links a.active {
+  background: #222;
+
+  color: white;
+}
+
+.user-area {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+}
+
+.username {
+  color: #555;
+
+  font-size: 14px;
+}
+
+.logout-button {
+  padding: 8px 13px;
+
+  border: 1px solid #ccc;
+
+  border-radius: 7px;
+
+  background: white;
+
+  color: #333;
+
+  font-size: 13px;
+
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: #f5f5f5;
+}
+
+.content {
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+
+  .navbar-inner {
+    flex-wrap: wrap;
+
+    gap: 10px;
+
+    padding-top: 10px;
+
+    padding-bottom: 10px;
+  }
+
+  .brand {
+    width: 100%;
+  }
+
+  .nav-links {
+    order: 2;
+
+    overflow-x: auto;
+
+    flex: 1;
+  }
+
+  .user-area {
+    order: 3;
+  }
+
+  .username {
+    display: none;
+  }
+
+}

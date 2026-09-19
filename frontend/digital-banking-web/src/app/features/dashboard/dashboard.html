@@ -1,0 +1,297 @@
+<div class="page">
+
+  <header class="header">
+    <div>
+      <h1>Dashboard</h1>
+
+      <p>
+        Welcome, {{ username }}
+      </p>
+    </div>
+  </header>
+
+
+  @if (loading) {
+
+    <div class="loading">
+      Loading dashboard...
+    </div>
+
+  }
+
+
+  @if (errorMessage) {
+
+    <div class="error">
+      {{ errorMessage }}
+    </div>
+
+  }
+
+
+  @if (!loading && !errorMessage) {
+
+    <!-- Summary -->
+    <section class="summary-grid">
+
+      <div class="summary-card">
+
+        <div class="summary-label">
+          Total Balance
+        </div>
+
+        <div class="summary-value">
+          {{ totalBalance | number:'1.2-2' }}
+          THB
+        </div>
+
+      </div>
+
+
+      <div class="summary-card">
+
+        <div class="summary-label">
+          Accounts
+        </div>
+
+        <div class="summary-value">
+          {{ accounts.length }}
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- Actions -->
+    <section class="actions">
+
+      <button
+        type="button"
+        class="primary-button"
+        (click)="goToTransfer()"
+      >
+        Transfer Money
+      </button>
+
+
+      <button
+        type="button"
+        class="secondary-button"
+        (click)="goToAccounts()"
+      >
+        View All Accounts
+      </button>
+
+    </section>
+
+
+    <!-- Accounts -->
+    <section class="section">
+
+      <div class="section-header">
+
+        <div>
+          <h2>My Accounts</h2>
+
+          <p>
+            Your current account balances
+          </p>
+        </div>
+
+
+        <button
+          type="button"
+          class="link-button"
+          (click)="goToAccounts()"
+        >
+          View All
+        </button>
+
+      </div>
+
+
+      @if (accounts.length === 0) {
+
+        <div class="empty">
+          No accounts found.
+        </div>
+
+      }
+
+
+      @if (accounts.length > 0) {
+
+        <div class="accounts-grid">
+
+          @for (
+            account of accounts;
+            track account.id
+          ) {
+
+            <div class="account-card">
+
+              <div class="account-header">
+
+                <div>
+
+                  <div class="account-type">
+                    {{ account.accountType }}
+                  </div>
+
+                  <div class="account-number">
+                    {{ account.accountNo }}
+                  </div>
+
+                </div>
+
+
+                <span class="account-status">
+                  {{ account.status }}
+                </span>
+
+              </div>
+
+
+              <div class="customer-name">
+                {{ account.customerName }}
+              </div>
+
+
+              <div class="balance-label">
+                Available Balance
+              </div>
+
+
+              <div class="balance">
+                {{ account.balance | number:'1.2-2' }}
+                {{ account.currency }}
+              </div>
+
+
+              <button
+                type="button"
+                class="transaction-button"
+                (click)="viewTransactions(account.id)"
+              >
+                View Transactions
+              </button>
+
+            </div>
+
+          }
+
+        </div>
+
+      }
+
+    </section>
+
+
+    <!-- Recent Transactions -->
+    <section class="section">
+
+      <div class="section-header">
+
+        <div>
+
+          <h2>Recent Transactions</h2>
+
+          <p>
+            Your latest account activity
+          </p>
+
+        </div>
+
+      </div>
+
+
+      @if (recentTransactions.length === 0) {
+
+        <div class="empty">
+          No recent transactions.
+        </div>
+
+      }
+
+
+      @if (recentTransactions.length > 0) {
+
+        <div class="transactions">
+
+          @for (
+            transaction of recentTransactions;
+            track transaction.id
+          ) {
+
+            <div class="transaction-card">
+
+              <div class="transaction-main">
+
+                <div>
+
+                  <div class="transaction-type">
+                    {{ transaction.transactionType }}
+                  </div>
+
+
+                  <div class="transaction-reference">
+                    {{ transaction.referenceNo }}
+                  </div>
+
+
+                  <div class="transaction-description">
+                    {{ transaction.description }}
+                  </div>
+
+
+                  <div class="transaction-account">
+                    Account:
+                    {{ getAccountNumber(transaction.accountId) }}
+                  </div>
+
+                </div>
+
+
+                <div
+                  class="transaction-amount"
+                  [class]="getTransactionAmountClass(transaction)"
+                >
+
+                  {{ getTransactionPrefix(transaction) }}
+
+                  {{ transaction.amount | number:'1.2-2' }}
+
+                  THB
+
+                </div>
+
+              </div>
+
+
+              <div class="transaction-footer">
+
+                <span>
+                  Balance After
+                </span>
+
+                <strong>
+                  {{ transaction.balanceAfter | number:'1.2-2' }}
+                  THB
+                </strong>
+
+              </div>
+
+            </div>
+
+          }
+
+        </div>
+
+      }
+
+    </section>
+
+  }
+
+</div>

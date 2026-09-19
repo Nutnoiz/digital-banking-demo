@@ -1,0 +1,74 @@
+<div class="app-shell">
+
+  <header class="navbar">
+
+    <div class="navbar-inner">
+
+      <a
+        class="brand"
+        routerLink="/dashboard"
+      >
+        Digital Banking
+      </a>
+
+
+      <nav class="nav-links">
+
+        <a
+          routerLink="/dashboard"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{
+            exact: true
+          }"
+        >
+          Dashboard
+        </a>
+
+
+        <a
+          routerLink="/accounts"
+          routerLinkActive="active"
+        >
+          Accounts
+        </a>
+
+
+        <a
+          routerLink="/transfer"
+          routerLinkActive="active"
+        >
+          Transfer
+        </a>
+
+      </nav>
+
+
+      <div class="user-area">
+
+        <span class="username">
+          {{ username }}
+        </span>
+
+
+        <button
+          type="button"
+          class="logout-button"
+          (click)="logout()"
+        >
+          Logout
+        </button>
+
+      </div>
+
+    </div>
+
+  </header>
+
+
+  <main class="content">
+
+    <router-outlet></router-outlet>
+
+  </main>
+
+</div>

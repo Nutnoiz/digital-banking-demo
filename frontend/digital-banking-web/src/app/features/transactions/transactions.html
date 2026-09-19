@@ -1,0 +1,160 @@
+<div class="page">
+
+  <header class="header">
+
+    <div>
+      <h1>Transaction History</h1>
+
+      <p>
+        Account ID:
+        <strong>{{ accountId }}</strong>
+      </p>
+    </div>
+
+    <a
+      class="back-link"
+      routerLink="/accounts"
+    >
+      ← Back to Accounts
+    </a>
+
+  </header>
+
+
+  @if (loading) {
+
+    <div class="loading">
+      Loading transactions...
+    </div>
+
+  }
+
+
+  @if (errorMessage) {
+
+    <div class="error">
+      {{ errorMessage }}
+    </div>
+
+  }
+
+
+  @if (!loading && !errorMessage) {
+
+    @if (transactions.length === 0) {
+
+      <div class="empty">
+        No transactions found.
+      </div>
+
+    } @else {
+
+      <div class="transactions">
+
+        @for (
+          transaction of transactions;
+          track transaction.id
+        ) {
+
+          <article class="transaction-card">
+
+            <div class="transaction-header">
+
+              <div>
+
+                <div
+                  class="transaction-type"
+                  [class.transfer-out]="
+                    transaction.transactionType === 'TRANSFER_OUT'
+                  "
+                  [class.deposit]="
+                    transaction.transactionType === 'DEPOSIT'
+                  "
+                >
+                  {{ transaction.transactionType }}
+                </div>
+
+                <div class="reference">
+                  {{ transaction.referenceNo }}
+                </div>
+
+              </div>
+
+
+              <div
+                class="amount"
+                [class.amount-out]="
+                  transaction.transactionType === 'TRANSFER_OUT'
+                "
+                [class.amount-in]="
+                  transaction.transactionType === 'DEPOSIT'
+                "
+              >
+
+                @if (
+                  transaction.transactionType === 'TRANSFER_OUT'
+                ) {
+                  -
+                }
+
+                @if (
+                  transaction.transactionType === 'DEPOSIT'
+                ) {
+                  +
+                }
+
+                {{ transaction.amount | number:'1.2-2' }}
+                THB
+
+              </div>
+
+            </div>
+
+
+            <div class="description">
+              {{ transaction.description }}
+            </div>
+
+
+            <div class="transaction-footer">
+
+              <div>
+
+                <span class="label">
+                  Balance Before
+                </span>
+
+                <span class="value">
+                  {{ transaction.balanceBefore | number:'1.2-2' }}
+                  THB
+                </span>
+
+              </div>
+
+
+              <div>
+
+                <span class="label">
+                  Balance After
+                </span>
+
+                <span class="value">
+                  {{ transaction.balanceAfter | number:'1.2-2' }}
+                  THB
+                </span>
+
+              </div>
+
+            </div>
+
+          </article>
+
+        }
+
+      </div>
+
+    }
+
+  }
+
+</div>

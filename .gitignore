@@ -1,0 +1,123 @@
+# ============================================================
+# Digital Banking Demo
+# ============================================================
+
+# ------------------------------------------------------------
+# Operating System
+# ------------------------------------------------------------
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+
+# Linux
+*~
+
+# ------------------------------------------------------------
+# IDE / Editors
+# ------------------------------------------------------------
+
+.idea/
+.vscode/
+*.iml
+
+# ------------------------------------------------------------
+# Java / Spring Boot / Maven
+# ------------------------------------------------------------
+
+backend/**/target/
+
+backend/**/.mvn/timing.properties
+
+*.class
+
+# Maven wrapper generated files
+backend/**/.mvn/wrapper/maven-wrapper.jar
+
+# Spring Boot logs
+backend/**/*.log
+backend/**/logs/
+
+# ------------------------------------------------------------
+# H2 Database
+# ------------------------------------------------------------
+
+# Do not commit local database files
+backend/**/data/
+
+*.db
+*.mv.db
+*.trace.db
+
+# H2 lock / temporary files
+*.lock.db
+
+# ------------------------------------------------------------
+# Node / Angular
+# ------------------------------------------------------------
+
+frontend/**/node_modules/
+
+frontend/**/.angular/
+
+frontend/**/dist/
+
+frontend/**/coverage/
+
+frontend/**/.cache/
+
+# Angular build output
+frontend/**/out-tsc/
+
+# npm logs
+frontend/**/npm-debug.log*
+frontend/**/yarn-debug.log*
+frontend/**/yarn-error.log*
+frontend/**/pnpm-debug.log*
+
+# ------------------------------------------------------------
+# Environment / Secrets
+# ------------------------------------------------------------
+
+.env
+.env.*
+!.env.example
+
+*.secret
+*.secrets
+
+# ------------------------------------------------------------
+# Temporary files
+# ------------------------------------------------------------
+
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# ------------------------------------------------------------
+# Test / Coverage
+# ------------------------------------------------------------
+
+coverage/
+.nyc_output/
+
+# ------------------------------------------------------------
+# Local configuration
+# ------------------------------------------------------------
+
+application-local.properties
+application-local.yml
+application-local.yaml
+
+# ------------------------------------------------------------
+# OS / tooling
+# ------------------------------------------------------------
+
+*.pid
+*.seed
+*.pid.lock
