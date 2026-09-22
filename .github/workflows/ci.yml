@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-
   pull_request:
     branches:
       - main
@@ -14,7 +13,6 @@ permissions:
   packages: write
 
 jobs:
-
   backend:
     name: Backend Build
     runs-on: ubuntu-latest
@@ -52,7 +50,6 @@ jobs:
           tags: |
             ghcr.io/nutnoiz/digital-banking-api:latest
             ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
-
 
   frontend:
     name: Frontend Build
@@ -95,10 +92,12 @@ jobs:
             ghcr.io/nutnoiz/digital-banking-web:latest
             ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
 
-
   deploy:
     name: Deploy to Kubernetes
-    runs-on: self-hosted
+    runs-on: [self-hosted, docker-desktop-test]
+
+    permissions:
+      contents: read
 
     needs:
       - backend
@@ -110,33 +109,64 @@ jobs:
       - name: Verify Kubernetes Context
         shell: powershell
         run: |
-          kubectl config current-context
-          kubectl get nodes
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $kubeconfig = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          $env:KUBECONFIG = $kubeconfig
+
+          Write-Host "Runner: $env:RUNNER_NAME"
+          Write-Host "Kubernetes context:"
+          & $kubectl config current-context
+
+          Write-Host "Kubernetes nodes:"
+          & $kubectl get nodes
 
       - name: Update Backend Image
         shell: powershell
         run: |
-          kubectl set image deployment/backend-deployment `
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          & $kubectl set image deployment/backend-deployment `
             backend=ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
 
       - name: Update Frontend Image
         shell: powershell
         run: |
-          kubectl set image deployment/frontend-deployment `
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          & $kubectl set image deployment/frontend-deployment `
             frontend=ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
 
       - name: Wait for Backend Rollout
         shell: powershell
         run: |
-          kubectl rollout status deployment/backend-deployment --timeout=180s
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          & $kubectl rollout status deployment/backend-deployment --timeout=180s
 
       - name: Wait for Frontend Rollout
         shell: powershell
         run: |
-          kubectl rollout status deployment/frontend-deployment --timeout=180s
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          & $kubectl rollout status deployment/frontend-deployment --timeout=180s
 
       - name: Verify Deployment
         shell: powershell
         run: |
-          kubectl get deployments
-          kubectl get pods
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          Write-Host "Deployments:"
+          & $kubectl get deployments
+
+          Write-Host "Pods:"
+          & $kubectl get pods
+
+          Write-Host "Services:"
+          & $kubectl get services
+
