@@ -15,6 +15,14 @@ jobs:
           Write-Host "Self-hosted runner test started"
           Write-Host "Runner: $env:RUNNER_NAME"
           Write-Host "OS: $env:RUNNER_OS"
-          kubectl config current-context
-          kubectl get nodes
+
+          $kubectl = "C:\Users\Admin\AppData\Local\Programs\DockerDesktop\resources\bin\kubectl.exe"
+
+          Write-Host "kubectl path: $kubectl"
+          Write-Host "kubectl exists: $(Test-Path $kubectl)"
+
+          & $kubectl version --client
+
+          & $kubectl config current-context
+          & $kubectl get nodes
 
