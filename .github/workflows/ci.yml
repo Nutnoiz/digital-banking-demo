@@ -13,6 +13,11 @@ permissions:
   packages: write
 
 jobs:
+
+  # ==============================================================
+  # BACKEND
+  # ==============================================================
+
   backend:
     name: Backend Build
     runs-on: ubuntu-latest
@@ -22,6 +27,7 @@ jobs:
         working-directory: backend/digital-banking-api
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -51,6 +57,11 @@ jobs:
             ghcr.io/nutnoiz/digital-banking-api:latest
             ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
 
+
+  # ==============================================================
+  # FRONTEND
+  # ==============================================================
+
   frontend:
     name: Frontend Build
     runs-on: ubuntu-latest
@@ -60,6 +71,7 @@ jobs:
         working-directory: frontend/digital-banking-web
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -92,6 +104,11 @@ jobs:
             ghcr.io/nutnoiz/digital-banking-web:latest
             ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
 
+
+  # ==============================================================
+  # DEPLOY
+  # ==============================================================
+
   deploy:
     name: Deploy to Kubernetes
     runs-on: [self-hosted, docker-desktop-test]
@@ -113,6 +130,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
 
       # ============================================================
       # KUBERNETES CONTEXT
@@ -152,6 +170,7 @@ jobs:
           Write-Host ""
           Write-Host "Kubernetes context verification: PASS"
 
+
       # ============================================================
       # KUSTOMIZE VERIFICATION
       # ============================================================
@@ -160,6 +179,7 @@ jobs:
         shell: powershell
         run: |
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
           Write-Host "========================================"
           Write-Host "KUSTOMIZE OVERLAY VERIFICATION"
@@ -187,6 +207,7 @@ jobs:
 
           Write-Host "Prod Kustomize overlay: PASS"
 
+
       # ============================================================
       # CAPTURE CURRENT DEV IMAGES
       # ============================================================
@@ -206,9 +227,11 @@ jobs:
           Write-Host ""
           Write-Host "Reading current Dev backend image..."
 
-          $backendImage = (& $kubectl get deployment backend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $backendImage = (
+            & $kubectl get deployment backend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($backendImage)) {
             throw "Failed to capture current Dev backend image."
@@ -220,9 +243,11 @@ jobs:
           Write-Host ""
           Write-Host "Reading current Dev frontend image..."
 
-          $frontendImage = (& $kubectl get deployment frontend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $frontendImage = (
+            & $kubectl get deployment frontend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($frontendImage)) {
             throw "Failed to capture current Dev frontend image."
@@ -241,6 +266,7 @@ jobs:
 
           Write-Host ""
           Write-Host "Previous Dev images captured: PASS"
+
 
       # ============================================================
       # CAPTURE CURRENT PROD IMAGES
@@ -261,9 +287,11 @@ jobs:
           Write-Host ""
           Write-Host "Reading current Prod backend image..."
 
-          $backendImage = (& $kubectl get deployment backend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $backendImage = (
+            & $kubectl get deployment backend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($backendImage)) {
             throw "Failed to capture current Prod backend image."
@@ -275,9 +303,11 @@ jobs:
           Write-Host ""
           Write-Host "Reading current Prod frontend image..."
 
-          $frontendImage = (& $kubectl get deployment frontend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $frontendImage = (
+            & $kubectl get deployment frontend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($frontendImage)) {
             throw "Failed to capture current Prod frontend image."
@@ -297,6 +327,7 @@ jobs:
           Write-Host ""
           Write-Host "Previous Prod images captured: PASS"
 
+
       # ============================================================
       # DEV IMAGE CONFIGURATION
       # ============================================================
@@ -306,7 +337,7 @@ jobs:
         env:
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          $devKustomization = Join-Path $env:GITHUB_WORKSPACE `
+          $devKustomizationFile = Join-Path $env:GITHUB_WORKSPACE `
             "k8s\overlays\dev\kustomization.yml"
 
           $backendImage = "ghcr.io/nutnoiz/digital-banking-api:$env:GITHUB_SHA"
@@ -318,7 +349,7 @@ jobs:
 
           Write-Host ""
           Write-Host "Kustomization file:"
-          Write-Host $devKustomization
+          Write-Host $devKustomizationFile
 
           Write-Host ""
           Write-Host "Backend image:"
@@ -328,24 +359,27 @@ jobs:
           Write-Host "Frontend image:"
           Write-Host $frontendImage
 
-          if (-not (Test-Path $devKustomization)) {
+          if (-not (Test-Path $devKustomizationFile)) {
             throw "Dev Kustomization file was not found."
           }
 
-          $content = [System.IO.File]::ReadAllText($devKustomization)
+          $content = [System.IO.File]::ReadAllText(
+            $devKustomizationFile
+          )
 
-          $backendPattern = '(?ms)(name:\s*ghcr\.io/nutnoiz/digital-banking-api\s*\r?\n\s*newTag:\s*)[^\r\n]+'
-          $frontendPattern = '(?ms)(name:\s*ghcr\.io/nutnoiz/digital-banking-web\s*\r?\n\s*newTag:\s*)[^\r\n]+'
+          # --------------------------------------------------------
+          # Backend
+          # --------------------------------------------------------
 
-          $backendMatches = [regex]::Matches($content, $backendPattern).Count
-          $frontendMatches = [regex]::Matches($content, $frontendPattern).Count
+          $backendPattern = '(?m)^(\s*-\s*name:\s*ghcr\.io/nutnoiz/digital-banking-api\s*\r?\n\s*newTag:\s*)[^\r\n]+$'
+
+          $backendMatches = [regex]::Matches(
+            $content,
+            $backendPattern
+          ).Count
 
           if ($backendMatches -ne 1) {
             throw "Expected exactly one Dev backend image definition, found $backendMatches."
-          }
-
-          if ($frontendMatches -ne 1) {
-            throw "Expected exactly one Dev frontend image definition, found $frontendMatches."
           }
 
           $content = [regex]::Replace(
@@ -353,6 +387,21 @@ jobs:
             $backendPattern,
             '${1}' + $env:GITHUB_SHA
           )
+
+          # --------------------------------------------------------
+          # Frontend
+          # --------------------------------------------------------
+
+          $frontendPattern = '(?m)^(\s*-\s*name:\s*ghcr\.io/nutnoiz/digital-banking-web\s*\r?\n\s*newTag:\s*)[^\r\n]+$'
+
+          $frontendMatches = [regex]::Matches(
+            $content,
+            $frontendPattern
+          ).Count
+
+          if ($frontendMatches -ne 1) {
+            throw "Expected exactly one Dev frontend image definition, found $frontendMatches."
+          }
 
           $content = [regex]::Replace(
             $content,
@@ -363,10 +412,31 @@ jobs:
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
           [System.IO.File]::WriteAllText(
-            $devKustomization,
+            $devKustomizationFile,
             $content,
             $utf8NoBom
           )
+
+          # --------------------------------------------------------
+          # Verify file
+          # --------------------------------------------------------
+
+          $updatedContent = [System.IO.File]::ReadAllText(
+            $devKustomizationFile
+          )
+
+          if ($updatedContent -notmatch [regex]::Escape(
+            "newTag: $env:GITHUB_SHA"
+          )) {
+            throw "Dev Kustomization file was not updated with GitHub SHA."
+          }
+
+          Write-Host ""
+          Write-Host "Dev Kustomization file updated: PASS"
+
+          # --------------------------------------------------------
+          # Render
+          # --------------------------------------------------------
 
           Write-Host ""
           Write-Host "Rendering Dev Kustomize..."
@@ -378,14 +448,23 @@ jobs:
             throw "Dev Kustomize rendering failed after image update."
           }
 
+          # IMPORTANT:
+          # kubectl output is an array of lines.
+          # Join it before using -match / -notmatch.
+          $renderedText = $rendered -join "`n"
+
           $expectedBackend = "image: $backendImage"
           $expectedFrontend = "image: $frontendImage"
 
-          if ($rendered -notmatch [regex]::Escape($expectedBackend)) {
+          Write-Host ""
+          Write-Host "Rendered images:"
+          $renderedText | Select-String "image:"
+
+          if ($renderedText -notmatch [regex]::Escape($expectedBackend)) {
             throw "Rendered Dev backend image does not match GitHub SHA."
           }
 
-          if ($rendered -notmatch [regex]::Escape($expectedFrontend)) {
+          if ($renderedText -notmatch [regex]::Escape($expectedFrontend)) {
             throw "Rendered Dev frontend image does not match GitHub SHA."
           }
 
@@ -393,6 +472,7 @@ jobs:
           Write-Host "Dev backend Kustomize image: PASS"
           Write-Host "Dev frontend Kustomize image: PASS"
           Write-Host "Dev rendered image verification: PASS"
+
 
       # ============================================================
       # DEV DEPLOYMENT
@@ -450,6 +530,7 @@ jobs:
 
           Write-Host "Dev change cause annotation: PASS"
 
+
       # ============================================================
       # DEV ROLLOUT
       # ============================================================
@@ -493,6 +574,7 @@ jobs:
           }
 
           Write-Host "Dev frontend rollout: PASS"
+
 
       # ============================================================
       # DEV VERIFICATION
@@ -542,9 +624,11 @@ jobs:
           Write-Host ""
           Write-Host "Backend image verification..."
 
-          $backendImage = (& $kubectl get deployment backend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $backendImage = (
+            & $kubectl get deployment backend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           Write-Host $backendImage
 
@@ -557,9 +641,11 @@ jobs:
           Write-Host ""
           Write-Host "Frontend image verification..."
 
-          $frontendImage = (& $kubectl get deployment frontend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $frontendImage = (
+            & $kubectl get deployment frontend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           Write-Host $frontendImage
 
@@ -614,6 +700,7 @@ jobs:
           Write-Host "DEV VERIFICATION: PASS"
           Write-Host "========================================"
 
+
       # ============================================================
       # PROD IMAGE CONFIGURATION
       # ============================================================
@@ -623,11 +710,8 @@ jobs:
         env:
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          $prodKustomization = Join-Path $env:GITHUB_WORKSPACE `
-            "k8s\overlays\prod"
-
-          $prodKustomizationFile = Join-Path $prodKustomization `
-            "kustomization.yml"
+          $prodKustomizationFile = Join-Path $env:GITHUB_WORKSPACE `
+            "k8s\overlays\prod\kustomization.yml"
 
           $backendImage = "ghcr.io/nutnoiz/digital-banking-api:$env:GITHUB_SHA"
           $frontendImage = "ghcr.io/nutnoiz/digital-banking-web:$env:GITHUB_SHA"
@@ -652,20 +736,23 @@ jobs:
             throw "Prod Kustomization file was not found."
           }
 
-          $content = [System.IO.File]::ReadAllText($prodKustomizationFile)
+          $content = [System.IO.File]::ReadAllText(
+            $prodKustomizationFile
+          )
 
-          $backendPattern = '(?ms)(name:\s*ghcr\.io/nutnoiz/digital-banking-api\s*\r?\n\s*newTag:\s*)[^\r\n]+'
-          $frontendPattern = '(?ms)(name:\s*ghcr\.io/nutnoiz/digital-banking-web\s*\r?\n\s*newTag:\s*)[^\r\n]+'
+          # --------------------------------------------------------
+          # Backend
+          # --------------------------------------------------------
 
-          $backendMatches = [regex]::Matches($content, $backendPattern).Count
-          $frontendMatches = [regex]::Matches($content, $frontendPattern).Count
+          $backendPattern = '(?m)^(\s*-\s*name:\s*ghcr\.io/nutnoiz/digital-banking-api\s*\r?\n\s*newTag:\s*)[^\r\n]+$'
+
+          $backendMatches = [regex]::Matches(
+            $content,
+            $backendPattern
+          ).Count
 
           if ($backendMatches -ne 1) {
             throw "Expected exactly one Prod backend image definition, found $backendMatches."
-          }
-
-          if ($frontendMatches -ne 1) {
-            throw "Expected exactly one Prod frontend image definition, found $frontendMatches."
           }
 
           $content = [regex]::Replace(
@@ -673,6 +760,21 @@ jobs:
             $backendPattern,
             '${1}' + $env:GITHUB_SHA
           )
+
+          # --------------------------------------------------------
+          # Frontend
+          # --------------------------------------------------------
+
+          $frontendPattern = '(?m)^(\s*-\s*name:\s*ghcr\.io/nutnoiz/digital-banking-web\s*\r?\n\s*newTag:\s*)[^\r\n]+$'
+
+          $frontendMatches = [regex]::Matches(
+            $content,
+            $frontendPattern
+          ).Count
+
+          if ($frontendMatches -ne 1) {
+            throw "Expected exactly one Prod frontend image definition, found $frontendMatches."
+          }
 
           $content = [regex]::Replace(
             $content,
@@ -688,6 +790,27 @@ jobs:
             $utf8NoBom
           )
 
+          # --------------------------------------------------------
+          # Verify file
+          # --------------------------------------------------------
+
+          $updatedContent = [System.IO.File]::ReadAllText(
+            $prodKustomizationFile
+          )
+
+          if ($updatedContent -notmatch [regex]::Escape(
+            "newTag: $env:GITHUB_SHA"
+          )) {
+            throw "Prod Kustomization file was not updated with GitHub SHA."
+          }
+
+          Write-Host ""
+          Write-Host "Prod Kustomization file updated: PASS"
+
+          # --------------------------------------------------------
+          # Render
+          # --------------------------------------------------------
+
           Write-Host ""
           Write-Host "Rendering Prod Kustomize..."
 
@@ -698,14 +821,23 @@ jobs:
             throw "Prod Kustomize rendering failed after image update."
           }
 
+          # IMPORTANT:
+          # kubectl output is an array of lines.
+          # Join it before using -match / -notmatch.
+          $renderedText = $rendered -join "`n"
+
           $expectedBackend = "image: $backendImage"
           $expectedFrontend = "image: $frontendImage"
 
-          if ($rendered -notmatch [regex]::Escape($expectedBackend)) {
+          Write-Host ""
+          Write-Host "Rendered images:"
+          $renderedText | Select-String "image:"
+
+          if ($renderedText -notmatch [regex]::Escape($expectedBackend)) {
             throw "Rendered Prod backend image does not match GitHub SHA."
           }
 
-          if ($rendered -notmatch [regex]::Escape($expectedFrontend)) {
+          if ($renderedText -notmatch [regex]::Escape($expectedFrontend)) {
             throw "Rendered Prod frontend image does not match GitHub SHA."
           }
 
@@ -713,6 +845,7 @@ jobs:
           Write-Host "Prod backend Kustomize image: PASS"
           Write-Host "Prod frontend Kustomize image: PASS"
           Write-Host "Prod rendered image verification: PASS"
+
 
       # ============================================================
       # PROD DEPLOYMENT
@@ -770,6 +903,7 @@ jobs:
 
           Write-Host "Prod change cause annotation: PASS"
 
+
       # ============================================================
       # PROD ROLLOUT
       # ============================================================
@@ -813,6 +947,7 @@ jobs:
           }
 
           Write-Host "Prod frontend rollout: PASS"
+
 
       # ============================================================
       # PROD VERIFICATION
@@ -862,9 +997,11 @@ jobs:
           Write-Host ""
           Write-Host "Backend image verification..."
 
-          $backendImage = (& $kubectl get deployment backend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $backendImage = (
+            & $kubectl get deployment backend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           Write-Host $backendImage
 
@@ -877,9 +1014,11 @@ jobs:
           Write-Host ""
           Write-Host "Frontend image verification..."
 
-          $frontendImage = (& $kubectl get deployment frontend-deployment `
-            -n $namespace `
-            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+          $frontendImage = (
+            & $kubectl get deployment frontend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
 
           Write-Host $frontendImage
 
@@ -934,6 +1073,7 @@ jobs:
           Write-Host "PROD VERIFICATION: PASS"
           Write-Host "========================================"
 
+
       # ============================================================
       # AUTOMATIC ROLLBACK
       # ============================================================
@@ -945,6 +1085,16 @@ jobs:
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          # --------------------------------------------------------
+          # Shared rollback patterns
+          # --------------------------------------------------------
+
+          $backendPattern = '(?m)^(\s*-\s*name:\s*ghcr\.io/nutnoiz/digital-banking-api\s*\r?\n\s*newTag:\s*)[^\r\n]+$'
+
+          $frontendPattern = '(?m)^(\s*-\s*name:\s*ghcr\.io/nutnoiz/digital-banking-web\s*\r?\n\s*newTag:\s*)[^\r\n]+$'
+
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
           Write-Host "========================================"
           Write-Host "AUTOMATIC ROLLBACK"
           Write-Host "========================================"
@@ -952,6 +1102,7 @@ jobs:
           Write-Host ""
           Write-Host "Deployment verification failed."
           Write-Host "Restoring previous deployment images..."
+
 
           # ========================================================
           # DEV ROLLBACK
@@ -983,13 +1134,34 @@ jobs:
           Write-Host "Previous Dev frontend image:"
           Write-Host $env:PREVIOUS_DEV_FRONTEND_IMAGE
 
-          $content = [System.IO.File]::ReadAllText($devKustomizationFile)
+          if (-not (Test-Path $devKustomizationFile)) {
+            throw "Dev Kustomization file was not found during rollback."
+          }
+
+          $content = [System.IO.File]::ReadAllText(
+            $devKustomizationFile
+          )
 
           $backendTag = ($env:PREVIOUS_DEV_BACKEND_IMAGE -split ':')[-1]
           $frontendTag = ($env:PREVIOUS_DEV_FRONTEND_IMAGE -split ':')[-1]
 
-          $backendPattern = '(?ms)(name:\s*ghcr\.io/nutnoiz/digital-banking-api\s*\r?\n\s*newTag:\s*)[^\r\n]+'
-          $frontendPattern = '(?ms)(name:\s*ghcr\.io/nutnoiz/digital-banking-web\s*\r?\n\s*newTag:\s*)[^\r\n]+'
+          $backendMatches = [regex]::Matches(
+            $content,
+            $backendPattern
+          ).Count
+
+          $frontendMatches = [regex]::Matches(
+            $content,
+            $frontendPattern
+          ).Count
+
+          if ($backendMatches -ne 1) {
+            throw "Expected exactly one Dev backend image definition during rollback, found $backendMatches."
+          }
+
+          if ($frontendMatches -ne 1) {
+            throw "Expected exactly one Dev frontend image definition during rollback, found $frontendMatches."
+          }
 
           $content = [regex]::Replace(
             $content,
@@ -1002,8 +1174,6 @@ jobs:
             $frontendPattern,
             '${1}' + $frontendTag
           )
-
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
           [System.IO.File]::WriteAllText(
             $devKustomizationFile,
@@ -1050,6 +1220,7 @@ jobs:
 
           Write-Host "Dev frontend rollback rollout: PASS"
 
+
           # ========================================================
           # PROD ROLLBACK
           # ========================================================
@@ -1080,10 +1251,34 @@ jobs:
           Write-Host "Previous Prod frontend image:"
           Write-Host $env:PREVIOUS_PROD_FRONTEND_IMAGE
 
-          $content = [System.IO.File]::ReadAllText($prodKustomizationFile)
+          if (-not (Test-Path $prodKustomizationFile)) {
+            throw "Prod Kustomization file was not found during rollback."
+          }
+
+          $content = [System.IO.File]::ReadAllText(
+            $prodKustomizationFile
+          )
 
           $backendTag = ($env:PREVIOUS_PROD_BACKEND_IMAGE -split ':')[-1]
           $frontendTag = ($env:PREVIOUS_PROD_FRONTEND_IMAGE -split ':')[-1]
+
+          $backendMatches = [regex]::Matches(
+            $content,
+            $backendPattern
+          ).Count
+
+          $frontendMatches = [regex]::Matches(
+            $content,
+            $frontendPattern
+          ).Count
+
+          if ($backendMatches -ne 1) {
+            throw "Expected exactly one Prod backend image definition during rollback, found $backendMatches."
+          }
+
+          if ($frontendMatches -ne 1) {
+            throw "Expected exactly one Prod frontend image definition during rollback, found $frontendMatches."
+          }
 
           $content = [regex]::Replace(
             $content,
@@ -1141,6 +1336,7 @@ jobs:
           }
 
           Write-Host "Prod frontend rollback rollout: PASS"
+
 
           # ========================================================
           # ROLLBACK HEALTH VERIFICATION
