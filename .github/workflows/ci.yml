@@ -59,7 +59,7 @@ steps:
       tags: |
         ghcr.io/nutnoiz/digital-banking-api:latest
         ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
-```
+
 
 # ==============================================================
 
@@ -71,7 +71,7 @@ frontend:
 name: Frontend Build
 runs-on: ubuntu-latest
 
-```
+
 defaults:
   run:
     working-directory: frontend/digital-banking-web
@@ -109,7 +109,7 @@ steps:
       tags: |
         ghcr.io/nutnoiz/digital-banking-web:latest
         ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
-```
+
 
 # ==============================================================
 
@@ -121,7 +121,7 @@ deploy:
 name: Deploy to Kubernetes
 runs-on: [self-hosted, docker-desktop-test]
 
-```
+
 permissions:
   contents: read
 
