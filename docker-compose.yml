@@ -1,0 +1,25 @@
+services:
+
+  backend:
+    image: digital-banking-api:demo
+    container_name: digital-banking-api
+    environment:
+      JWT_SECRET: l2BnfXmo85R6ZIau_0or1qMJK-qKrH5yPxBPENY0-c4
+      DEMO_USERNAME: demo
+      DEMO_PASSWORD: Demo123!
+    volumes:
+      - banking-data:/app/data
+    ports:
+      - "8080:8080"
+
+  frontend:
+    image: digital-banking-web:demo
+    container_name: digital-banking-web
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+
+volumes:
+  banking-data:
+    external: true

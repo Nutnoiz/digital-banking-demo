@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: backend-deployment
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: digital-banking-backend
+
+  template:
+    metadata:
+      labels:
+        app: digital-banking-backend
+
+    spec:
+      containers:
+        - name: backend
+          image: digital-banking-api:demo-v3
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8080
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+          env:
+            - name: DEMO_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DEMO_USERNAME
+
+            - name: DEMO_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: DEMO_PASSWORD
+
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: JWT_SECRET
+
+          volumeMounts:
+            - name: banking-storage
+              mountPath: /app/data
+
+      volumes:
+        - name: banking-storage
+          persistentVolumeClaim:
+            claimName: banking-data
+

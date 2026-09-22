@@ -121,3 +121,5 @@ application-local.yaml
 *.pid
 *.seed
 *.pid.lock
+# Kubernetes local secrets
+k8s/app/backend-secret.yml

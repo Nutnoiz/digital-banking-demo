@@ -55,6 +55,13 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
 
+                // Kubernetes health endpoints
+                .requestMatchers(
+                    "/actuator/health",
+                    "/actuator/health/readiness",
+                    "/actuator/health/liveness"
+                ).permitAll()
+
                 .requestMatchers("/api/accounts/**")
                     .authenticated()
 
@@ -116,9 +123,10 @@ public class SecurityConfig {
                 new JwtAuthenticationConverter();
 
         converter.setJwtGrantedAuthoritiesConverter(
-                authoritiesConverter
+            authoritiesConverter
         );
 
         return converter;
     }
 }
+
