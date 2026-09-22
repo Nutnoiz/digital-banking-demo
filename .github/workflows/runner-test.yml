@@ -17,12 +17,21 @@ jobs:
           Write-Host "OS: $env:RUNNER_OS"
 
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $kubeconfig = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
           Write-Host "kubectl path: $kubectl"
           Write-Host "kubectl exists: $(Test-Path $kubectl)"
 
+          Write-Host "kubeconfig path: $kubeconfig"
+          Write-Host "kubeconfig exists: $(Test-Path $kubeconfig)"
+
+          $env:KUBECONFIG = $kubeconfig
+
           & $kubectl version --client
 
+          Write-Host "Current Kubernetes context:"
           & $kubectl config current-context
+
+          Write-Host "Kubernetes nodes:"
           & $kubectl get nodes
 
