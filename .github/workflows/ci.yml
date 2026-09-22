@@ -137,6 +137,56 @@ jobs:
             throw "Failed to access Kubernetes cluster."
           }
 
+          Write-Host ""
+          Write-Host "Kubernetes context verification: PASS"
+
+      - name: Capture Current Deployment Images
+        shell: powershell
+        run: |
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          Write-Host "========================================"
+          Write-Host "CAPTURE CURRENT DEPLOYMENT IMAGES"
+          Write-Host "========================================"
+
+          Write-Host ""
+          Write-Host "Reading current backend image..."
+
+          $backendImage = (& $kubectl get deployment backend-deployment `
+            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($backendImage)) {
+            throw "Failed to capture current backend image."
+          }
+
+          Write-Host "Current backend image:"
+          Write-Host $backendImage
+
+          Write-Host ""
+          Write-Host "Reading current frontend image..."
+
+          $frontendImage = (& $kubectl get deployment frontend-deployment `
+            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
+
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($frontendImage)) {
+            throw "Failed to capture current frontend image."
+          }
+
+          Write-Host "Current frontend image:"
+          Write-Host $frontendImage
+
+          Add-Content `
+            -Path $env:GITHUB_ENV `
+            -Value "PREVIOUS_BACKEND_IMAGE=$backendImage"
+
+          Add-Content `
+            -Path $env:GITHUB_ENV `
+            -Value "PREVIOUS_FRONTEND_IMAGE=$frontendImage"
+
+          Write-Host ""
+          Write-Host "Previous deployment images captured: PASS"
+
       - name: Update Backend Image
         shell: powershell
         env:
@@ -302,8 +352,8 @@ jobs:
 
           Write-Host ""
           Write-Host "Backend image:"
-          $backendImage = & $kubectl get deployment backend-deployment `
-            -o jsonpath="{.spec.template.spec.containers[0].image}"
+          $backendImage = (& $kubectl get deployment backend-deployment `
+            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
 
           Write-Host $backendImage
 
@@ -315,8 +365,8 @@ jobs:
 
           Write-Host ""
           Write-Host "Frontend image:"
-          $frontendImage = & $kubectl get deployment frontend-deployment `
-            -o jsonpath="{.spec.template.spec.containers[0].image}"
+          $frontendImage = (& $kubectl get deployment frontend-deployment `
+            -o jsonpath="{.spec.template.spec.containers[0].image}").Trim()
 
           Write-Host $frontendImage
 
@@ -371,5 +421,128 @@ jobs:
           Write-Host ""
           Write-Host "========================================"
           Write-Host "APPLICATION VERIFICATION: PASS"
+          Write-Host "========================================"
+
+      - name: Automatic Rollback
+        if: failure()
+        shell: powershell
+        run: |
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          Write-Host "========================================"
+          Write-Host "AUTOMATIC ROLLBACK"
+          Write-Host "========================================"
+
+          Write-Host ""
+          Write-Host "Deployment verification failed."
+          Write-Host "Restoring previous deployment images..."
+
+          Write-Host ""
+          Write-Host "Previous backend image:"
+          Write-Host $env:PREVIOUS_BACKEND_IMAGE
+
+          Write-Host ""
+          Write-Host "Previous frontend image:"
+          Write-Host $env:PREVIOUS_FRONTEND_IMAGE
+
+          if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_BACKEND_IMAGE)) {
+            throw "Previous backend image is not available."
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_FRONTEND_IMAGE)) {
+            throw "Previous frontend image is not available."
+          }
+
+          Write-Host ""
+          Write-Host "Restoring backend image..."
+
+          & $kubectl set image deployment/backend-deployment `
+            backend=$env:PREVIOUS_BACKEND_IMAGE
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to restore backend image."
+          }
+
+          Write-Host "Backend image restore: PASS"
+
+          Write-Host ""
+          Write-Host "Restoring frontend image..."
+
+          & $kubectl set image deployment/frontend-deployment `
+            frontend=$env:PREVIOUS_FRONTEND_IMAGE
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to restore frontend image."
+          }
+
+          Write-Host "Frontend image restore: PASS"
+
+          Write-Host ""
+          Write-Host "Waiting for backend rollback..."
+
+          & $kubectl rollout status deployment/backend-deployment --timeout=180s
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Backend rollback rollout failed."
+          }
+
+          Write-Host "Backend rollback rollout: PASS"
+
+          Write-Host ""
+          Write-Host "Waiting for frontend rollback..."
+
+          & $kubectl rollout status deployment/frontend-deployment --timeout=180s
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Frontend rollback rollout failed."
+          }
+
+          Write-Host "Frontend rollback rollout: PASS"
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "ROLLBACK HEALTH VERIFICATION"
+          Write-Host "========================================"
+
+          Write-Host ""
+          Write-Host "Backend health after rollback:"
+
+          $backendHealth = & $kubectl exec deployment/backend-deployment -- `
+            wget -qO- http://127.0.0.1:8080/actuator/health
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Backend rollback health request failed."
+          }
+
+          Write-Host $backendHealth
+
+          if ($backendHealth -notmatch '"status":"UP"') {
+            throw "Backend health is not UP after rollback."
+          }
+
+          Write-Host "Backend rollback health: PASS"
+
+          Write-Host ""
+          Write-Host "Frontend -> Backend health after rollback:"
+
+          $frontendHealth = & $kubectl exec deployment/frontend-deployment -- `
+            wget -qO- http://127.0.0.1/api/health
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Frontend -> Backend rollback health request failed."
+          }
+
+          Write-Host $frontendHealth
+
+          if ($frontendHealth -notmatch '"status":"UP"') {
+            throw "Frontend -> Backend health is not UP after rollback."
+          }
+
+          Write-Host "Frontend -> Backend rollback health: PASS"
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "AUTOMATIC ROLLBACK: PASS"
           Write-Host "========================================"
 
