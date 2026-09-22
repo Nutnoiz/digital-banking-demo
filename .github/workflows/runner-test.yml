@@ -6,12 +6,14 @@ on:
 jobs:
   test-runner:
     name: Test Self-hosted Runner
-    runs-on: self-hosted
+    runs-on: docker-desktop-runner-test
 
     steps:
-      - name: Test PowerShell
+      - name: Test Runner
         shell: powershell
         run: |
-          Write-Host "Self-hosted runner is working"
+          Write-Host "Self-hosted runner test started"
+          Write-Host "Runner: $env:RUNNER_NAME"
+          Write-Host "OS: $env:RUNNER_OS"
           kubectl config current-context
           kubectl get nodes
