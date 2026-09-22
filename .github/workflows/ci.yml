@@ -139,35 +139,91 @@ jobs:
 
       - name: Update Backend Image
         shell: powershell
+        env:
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          $image = "ghcr.io/nutnoiz/digital-banking-api:$env:GITHUB_SHA"
+          $changeCause = "Git commit $env:GITHUB_SHA"
+
+          Write-Host "========================================"
+          Write-Host "BACKEND DEPLOYMENT"
+          Write-Host "========================================"
+
+          Write-Host ""
+          Write-Host "Image: $image"
+          Write-Host "Change cause: $changeCause"
+
+          Write-Host ""
+          Write-Host "Recording rollout change cause..."
+
+          & $kubectl annotate deployment/backend-deployment `
+            kubernetes.io/change-cause="$changeCause" `
+            --overwrite
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to annotate backend deployment."
+          }
+
+          Write-Host "Change cause annotation: PASS"
+
+          Write-Host ""
           Write-Host "Updating backend image..."
-          Write-Host "Image: ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}"
 
           & $kubectl set image deployment/backend-deployment `
-            backend=ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
+            backend=$image
 
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to update backend image."
           }
 
+          Write-Host "Backend image update: PASS"
+
       - name: Update Frontend Image
         shell: powershell
+        env:
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          $image = "ghcr.io/nutnoiz/digital-banking-web:$env:GITHUB_SHA"
+          $changeCause = "Git commit $env:GITHUB_SHA"
+
+          Write-Host "========================================"
+          Write-Host "FRONTEND DEPLOYMENT"
+          Write-Host "========================================"
+
+          Write-Host ""
+          Write-Host "Image: $image"
+          Write-Host "Change cause: $changeCause"
+
+          Write-Host ""
+          Write-Host "Recording rollout change cause..."
+
+          & $kubectl annotate deployment/frontend-deployment `
+            kubernetes.io/change-cause="$changeCause" `
+            --overwrite
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to annotate frontend deployment."
+          }
+
+          Write-Host "Change cause annotation: PASS"
+
+          Write-Host ""
           Write-Host "Updating frontend image..."
-          Write-Host "Image: ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}"
 
           & $kubectl set image deployment/frontend-deployment `
-            frontend=ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
+            frontend=$image
 
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to update frontend image."
           }
+
+          Write-Host "Frontend image update: PASS"
 
       - name: Wait for Backend Rollout
         shell: powershell
@@ -183,6 +239,8 @@ jobs:
             throw "Backend rollout failed."
           }
 
+          Write-Host "Backend rollout: PASS"
+
       - name: Wait for Frontend Rollout
         shell: powershell
         run: |
@@ -196,6 +254,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Frontend rollout failed."
           }
+
+          Write-Host "Frontend rollout: PASS"
 
       - name: Verify Application Health
         shell: powershell
