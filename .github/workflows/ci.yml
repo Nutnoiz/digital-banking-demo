@@ -94,3 +94,49 @@ jobs:
           tags: |
             ghcr.io/nutnoiz/digital-banking-web:latest
             ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
+
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: self-hosted
+
+    needs:
+      - backend
+      - frontend
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Verify Kubernetes Context
+        shell: powershell
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+
+      - name: Update Backend Image
+        shell: powershell
+        run: |
+          kubectl set image deployment/backend-deployment `
+            backend=ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
+
+      - name: Update Frontend Image
+        shell: powershell
+        run: |
+          kubectl set image deployment/frontend-deployment `
+            frontend=ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
+
+      - name: Wait for Backend Rollout
+        shell: powershell
+        run: |
+          kubectl rollout status deployment/backend-deployment --timeout=180s
+
+      - name: Wait for Frontend Rollout
+        shell: powershell
+        run: |
+          kubectl rollout status deployment/frontend-deployment --timeout=180s
+
+      - name: Verify Deployment
+        shell: powershell
+        run: |
+          kubectl get deployments
+          kubectl get pods
