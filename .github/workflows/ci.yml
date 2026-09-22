@@ -423,26 +423,8 @@ jobs:
           Write-Host "APPLICATION VERIFICATION: PASS"
           Write-Host "========================================"
 
-      - name: Controlled Rollback Failure Test
-        if: contains(github.event.head_commit.message, '[rollback-test]')
-        shell: powershell
-        run: |
-          Write-Host "========================================"
-          Write-Host "CONTROLLED ROLLBACK FAILURE TEST"
-          Write-Host "========================================"
-
-          Write-Host ""
-          Write-Host "Rollback test marker detected:"
-          Write-Host "[rollback-test]"
-
-          Write-Host ""
-          Write-Host "Intentionally failing this step."
-          Write-Host "Automatic rollback must execute next."
-
-          throw "INTENTIONAL FAILURE FOR AUTOMATIC ROLLBACK TEST"
-
       - name: Automatic Rollback
-        if: failure() || contains(github.event.head_commit.message, '[rollback-test]')
+        if: failure()
         shell: powershell
         run: |
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
@@ -563,4 +545,4 @@ jobs:
           Write-Host "========================================"
           Write-Host "AUTOMATIC ROLLBACK: PASS"
           Write-Host "========================================"
-
+          
