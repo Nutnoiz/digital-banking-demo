@@ -6,7 +6,7 @@ on:
 jobs:
   test-runner:
     name: Test Self-hosted Runner
-    runs-on: docker-desktop-runner-test
+    runs-on: [self-hosted, docker-desktop-test]
 
     steps:
       - name: Test Runner
@@ -17,3 +17,4 @@ jobs:
           Write-Host "OS: $env:RUNNER_OS"
           kubectl config current-context
           kubectl get nodes
+
