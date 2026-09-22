@@ -50,8 +50,8 @@ jobs:
           context: backend/digital-banking-api
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/digital-banking-api:latest
-            ghcr.io/${{ github.repository_owner }}/digital-banking-api:${{ github.sha }}
+            ghcr.io/nutnoiz/digital-banking-api:latest
+            ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
 
 
   frontend:
@@ -92,5 +92,5 @@ jobs:
           context: frontend/digital-banking-web
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/digital-banking-web:latest
-            ghcr.io/${{ github.repository_owner }}/digital-banking-web:${{ github.sha }}
+            ghcr.io/nutnoiz/digital-banking-web:latest
+            ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
