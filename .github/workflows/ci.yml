@@ -114,12 +114,28 @@ jobs:
 
           $env:KUBECONFIG = $kubeconfig
 
+          Write-Host "========================================"
+          Write-Host "KUBERNETES CONTEXT VERIFICATION"
+          Write-Host "========================================"
+
+          Write-Host ""
           Write-Host "Runner: $env:RUNNER_NAME"
+
+          Write-Host ""
           Write-Host "Kubernetes context:"
           & $kubectl config current-context
 
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to read Kubernetes context."
+          }
+
+          Write-Host ""
           Write-Host "Kubernetes nodes:"
           & $kubectl get nodes
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to access Kubernetes cluster."
+          }
 
       - name: Update Backend Image
         shell: powershell
@@ -127,8 +143,15 @@ jobs:
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          Write-Host "Updating backend image..."
+          Write-Host "Image: ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}"
+
           & $kubectl set image deployment/backend-deployment `
             backend=ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to update backend image."
+          }
 
       - name: Update Frontend Image
         shell: powershell
@@ -136,8 +159,15 @@ jobs:
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          Write-Host "Updating frontend image..."
+          Write-Host "Image: ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}"
+
           & $kubectl set image deployment/frontend-deployment `
             frontend=ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to update frontend image."
+          }
 
       - name: Wait for Backend Rollout
         shell: powershell
@@ -145,7 +175,13 @@ jobs:
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          Write-Host "Waiting for backend rollout..."
+
           & $kubectl rollout status deployment/backend-deployment --timeout=180s
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Backend rollout failed."
+          }
 
       - name: Wait for Frontend Rollout
         shell: powershell
@@ -153,20 +189,127 @@ jobs:
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          Write-Host "Waiting for frontend rollout..."
+
           & $kubectl rollout status deployment/frontend-deployment --timeout=180s
 
-      - name: Verify Deployment
+          if ($LASTEXITCODE -ne 0) {
+            throw "Frontend rollout failed."
+          }
+
+      - name: Verify Application Health
         shell: powershell
         run: |
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
+          Write-Host "========================================"
+          Write-Host "APPLICATION HEALTH VERIFICATION"
+          Write-Host "========================================"
+
+          Write-Host ""
           Write-Host "Deployments:"
           & $kubectl get deployments
 
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to get deployments."
+          }
+
+          Write-Host ""
           Write-Host "Pods:"
           & $kubectl get pods
 
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to get pods."
+          }
+
+          Write-Host ""
           Write-Host "Services:"
           & $kubectl get services
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to get services."
+          }
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "IMAGE VERSION VERIFICATION"
+          Write-Host "========================================"
+
+          Write-Host ""
+          Write-Host "Expected commit SHA:"
+          Write-Host "${{ github.sha }}"
+
+          Write-Host ""
+          Write-Host "Backend image:"
+          $backendImage = & $kubectl get deployment backend-deployment `
+            -o jsonpath="{.spec.template.spec.containers[0].image}"
+
+          Write-Host $backendImage
+
+          if ($backendImage -ne "ghcr.io/nutnoiz/digital-banking-api:${{ github.sha }}") {
+            throw "Backend image does not match GitHub commit SHA."
+          }
+
+          Write-Host "Backend image verification: PASS"
+
+          Write-Host ""
+          Write-Host "Frontend image:"
+          $frontendImage = & $kubectl get deployment frontend-deployment `
+            -o jsonpath="{.spec.template.spec.containers[0].image}"
+
+          Write-Host $frontendImage
+
+          if ($frontendImage -ne "ghcr.io/nutnoiz/digital-banking-web:${{ github.sha }}") {
+            throw "Frontend image does not match GitHub commit SHA."
+          }
+
+          Write-Host "Frontend image verification: PASS"
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "BACKEND HEALTH CHECK"
+          Write-Host "========================================"
+
+          $backendHealth = & $kubectl exec deployment/backend-deployment -- `
+            wget -qO- http://127.0.0.1:8080/actuator/health
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Backend health endpoint request failed."
+          }
+
+          Write-Host "Backend response:"
+          Write-Host $backendHealth
+
+          if ($backendHealth -notmatch '"status":"UP"') {
+            throw "Backend health status is not UP."
+          }
+
+          Write-Host "Backend health verification: PASS"
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "FRONTEND -> BACKEND HEALTH CHECK"
+          Write-Host "========================================"
+
+          $frontendHealth = & $kubectl exec deployment/frontend-deployment -- `
+            wget -qO- http://127.0.0.1/api/health
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Frontend -> Backend health request failed."
+          }
+
+          Write-Host "Frontend -> Backend response:"
+          Write-Host $frontendHealth
+
+          if ($frontendHealth -notmatch '"status":"UP"') {
+            throw "Frontend -> Backend health status is not UP."
+          }
+
+          Write-Host "Frontend -> Backend verification: PASS"
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "APPLICATION VERIFICATION: PASS"
+          Write-Host "========================================"
 
