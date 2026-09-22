@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: digital-banking-dev
+
+resources:
+  - ../../base
+
+images:
+  - name: ghcr.io/nutnoiz/digital-banking-api
+    newTag: b1654f0755742372bf5c2412f1ba670543cbe451
+
+  - name: ghcr.io/nutnoiz/digital-banking-web
+    newTag: b1654f0755742372bf5c2412f1ba670543cbe451
+
+patches:
+  - target:
+      kind: Service
+      name: frontend-service
+    patch: |-
+      - op: replace
+        path: /spec/ports/0/nodePort
+        value: 30081
+
+  - target:
+      kind: Ingress
+      name: digital-banking-ingress
+    patch: |-
+      - op: add
+        path: /spec/rules/0/host
+        value: dev.digital-banking.local
+
+  - target:
+      kind: PersistentVolumeClaim
+      name: banking-data
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: dev-banking-data
+
+  - target:
+      kind: Deployment
+      name: backend-deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/volumes/0/persistentVolumeClaim/claimName
+        value: dev-banking-data
