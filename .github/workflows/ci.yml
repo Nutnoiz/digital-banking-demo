@@ -33,6 +33,9 @@ jobs:
       - name: Build and Test Backend
         run: ./mvnw clean verify
 
+      - name: Build Backend Docker Image
+        run: docker build -t digital-banking-api:ci .
+
 
   frontend:
     name: Frontend Build
@@ -58,3 +61,6 @@ jobs:
 
       - name: Build Frontend
         run: npm run build
+
+      - name: Build Frontend Docker Image
+        run: docker build -t digital-banking-web:ci .
