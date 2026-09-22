@@ -16,7 +16,7 @@ jobs:
           Write-Host "Runner: $env:RUNNER_NAME"
           Write-Host "OS: $env:RUNNER_OS"
 
-          $kubectl = "C:\Users\Admin\AppData\Local\Programs\DockerDesktop\resources\bin\kubectl.exe"
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
 
           Write-Host "kubectl path: $kubectl"
           Write-Host "kubectl exists: $(Test-Path $kubectl)"
