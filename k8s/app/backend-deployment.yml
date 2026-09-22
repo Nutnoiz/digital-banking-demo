@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: digital-banking-api:demo-v3
+          image: ghcr.io/nutnoiz/digital-banking-api:b1654f0755742372bf5c2412f1ba670543cbe451
           imagePullPolicy: IfNotPresent
 
           ports:

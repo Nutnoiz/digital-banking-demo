@@ -19,7 +19,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: digital-banking-web:demo
+          image: ghcr.io/nutnoiz/digital-banking-web:b1654f0755742372bf5c2412f1ba670543cbe451
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
+
