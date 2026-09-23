@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -9,15 +9,25 @@ on:
     branches:
       - main
 
+
 permissions:
   contents: read
   packages: write
 
 
+# ==============================================================
+# WORKFLOW CONCURRENCY
+# ==============================================================
+
+concurrency:
+  group: digital-banking-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+
 jobs:
 
   # ============================================================
-  # BACKEND
+  # BACKEND CI
   # ============================================================
 
   backend:
@@ -33,6 +43,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -40,8 +51,10 @@ jobs:
           java-version: '21'
           cache: maven
 
+
       - name: Build and Test Backend
         run: ./mvnw clean verify
+
 
       - name: Login to GHCR
         if: github.event_name == 'push'
@@ -50,6 +63,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Build and Push Backend Docker Image
         if: github.event_name == 'push'
@@ -63,7 +77,7 @@ jobs:
 
 
   # ============================================================
-  # FRONTEND
+  # FRONTEND CI
   # ============================================================
 
   frontend:
@@ -79,6 +93,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -86,11 +101,14 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/digital-banking-web/package-lock.json
 
+
       - name: Install Dependencies
         run: npm ci
 
+
       - name: Build Frontend
         run: npm run build
+
 
       - name: Login to GHCR
         if: github.event_name == 'push'
@@ -99,6 +117,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Build and Push Frontend Docker Image
         if: github.event_name == 'push'
@@ -112,11 +131,12 @@ jobs:
 
 
   # ============================================================
-  # DEPLOY
+  # DEPLOY DEVELOPMENT
   # ============================================================
 
-  deploy:
-    name: Deploy to Kubernetes
+  deploy-dev:
+    name: Deploy Development
+
     runs-on:
       - self-hosted
       - docker-desktop-test
@@ -126,6 +146,13 @@ jobs:
       - frontend
 
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    environment:
+      name: development
+
+    concurrency:
+      group: digital-banking-development
+      cancel-in-progress: false
 
     permissions:
       contents: read
@@ -235,9 +262,6 @@ jobs:
           Write-Host "CAPTURE CURRENT DEV IMAGES"
           Write-Host "========================================"
 
-          Write-Host ""
-          Write-Host "Reading current Dev backend image..."
-
           $backendImage = (
             & $kubectl get deployment backend-deployment `
               -n $namespace `
@@ -247,11 +271,6 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($backendImage)) {
             throw "Failed to capture current Dev backend image."
           }
-
-          Write-Host $backendImage
-
-          Write-Host ""
-          Write-Host "Reading current Dev frontend image..."
 
           $frontendImage = (
             & $kubectl get deployment frontend-deployment `
@@ -263,6 +282,12 @@ jobs:
             throw "Failed to capture current Dev frontend image."
           }
 
+          Write-Host ""
+          Write-Host "Previous Dev backend:"
+          Write-Host $backendImage
+
+          Write-Host ""
+          Write-Host "Previous Dev frontend:"
           Write-Host $frontendImage
 
           Add-Content `
@@ -278,66 +303,7 @@ jobs:
 
 
       # ========================================================
-      # CAPTURE CURRENT PROD IMAGES
-      # ========================================================
-
-      - name: Capture Current Prod Images
-        shell: powershell
-        run: |
-
-          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
-          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
-
-          $namespace = "digital-banking-prod"
-
-          Write-Host "========================================"
-          Write-Host "CAPTURE CURRENT PROD IMAGES"
-          Write-Host "========================================"
-
-          Write-Host ""
-          Write-Host "Reading current Prod backend image..."
-
-          $backendImage = (
-            & $kubectl get deployment backend-deployment `
-              -n $namespace `
-              -o jsonpath="{.spec.template.spec.containers[0].image}"
-          ).Trim()
-
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($backendImage)) {
-            throw "Failed to capture current Prod backend image."
-          }
-
-          Write-Host $backendImage
-
-          Write-Host ""
-          Write-Host "Reading current Prod frontend image..."
-
-          $frontendImage = (
-            & $kubectl get deployment frontend-deployment `
-              -n $namespace `
-              -o jsonpath="{.spec.template.spec.containers[0].image}"
-          ).Trim()
-
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($frontendImage)) {
-            throw "Failed to capture current Prod frontend image."
-          }
-
-          Write-Host $frontendImage
-
-          Add-Content `
-            -Path $env:GITHUB_ENV `
-            -Value "PREVIOUS_PROD_BACKEND_IMAGE=$backendImage"
-
-          Add-Content `
-            -Path $env:GITHUB_ENV `
-            -Value "PREVIOUS_PROD_FRONTEND_IMAGE=$frontendImage"
-
-          Write-Host ""
-          Write-Host "Previous Prod images captured: PASS"
-
-
-      # ========================================================
-      # CONFIGURE DEV KUSTOMIZE IMAGES
+      # CONFIGURE DEV IMAGES
       # ========================================================
 
       - name: Configure Dev Kustomize Images
@@ -346,7 +312,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: |
 
-          $devKustomizationFile = Join-Path `
+          $file = Join-Path `
             $env:GITHUB_WORKSPACE `
             "k8s\overlays\dev\kustomization.yml"
 
@@ -357,25 +323,17 @@ jobs:
           Write-Host "CONFIGURE DEV KUSTOMIZE IMAGES"
           Write-Host "========================================"
 
-          Write-Host ""
-          Write-Host "GitHub SHA:"
-          Write-Host $env:GITHUB_SHA
-
-          if (-not (Test-Path $devKustomizationFile)) {
+          if (-not (Test-Path $file)) {
             throw "Dev Kustomization file was not found."
           }
 
           $lines = [System.Collections.Generic.List[string]](
-            [System.IO.File]::ReadAllLines($devKustomizationFile)
+            [System.IO.File]::ReadAllLines($file)
           )
 
           if ($lines.Count -eq 0) {
             throw "Dev Kustomization file is empty."
           }
-
-          # ----------------------------------------------------
-          # Backend
-          # ----------------------------------------------------
 
           $backendIndexes = @(
             0..($lines.Count - 1) |
@@ -400,9 +358,6 @@ jobs:
 
           $lines[$backendIndex + 1] = "    newTag: $env:GITHUB_SHA"
 
-          # ----------------------------------------------------
-          # Frontend
-          # ----------------------------------------------------
 
           $frontendIndexes = @(
             0..($lines.Count - 1) |
@@ -427,25 +382,17 @@ jobs:
 
           $lines[$frontendIndex + 1] = "    newTag: $env:GITHUB_SHA"
 
-          # ----------------------------------------------------
-          # Write
-          # ----------------------------------------------------
 
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
           [System.IO.File]::WriteAllLines(
-            $devKustomizationFile,
+            $file,
             $lines,
             $utf8NoBom
           )
 
-          # ----------------------------------------------------
-          # Verify file
-          # ----------------------------------------------------
 
-          $updatedLines = [System.IO.File]::ReadAllLines(
-            $devKustomizationFile
-          )
+          $updatedLines = [System.IO.File]::ReadAllLines($file)
 
           $updatedTags = @(
             $updatedLines |
@@ -455,24 +402,15 @@ jobs:
           )
 
           if ($updatedTags.Count -ne 2) {
-            throw "Dev Kustomization file must contain exactly two expected SHA tags, found $($updatedTags.Count)."
+            throw "Dev Kustomization must contain exactly two expected SHA tags."
           }
 
-          Write-Host ""
-          Write-Host "Dev Kustomization file updated: PASS"
-
-          # ----------------------------------------------------
-          # Render
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Rendering Dev Kustomize..."
 
           $rendered = & "C:\Program Files\Kubernetes\kubectl.exe" `
             kustomize .\k8s\overlays\dev
 
           if ($LASTEXITCODE -ne 0) {
-            throw "Dev Kustomize rendering failed after image update."
+            throw "Dev Kustomize rendering failed."
           }
 
           $renderedText = $rendered -join "`n"
@@ -480,26 +418,17 @@ jobs:
           $expectedBackend = "image: $backendName`:$env:GITHUB_SHA"
           $expectedFrontend = "image: $frontendName`:$env:GITHUB_SHA"
 
-          Write-Host ""
-          Write-Host "Rendered images:"
-
-          $rendered |
-            Select-String "image:" |
-            ForEach-Object {
-              Write-Host $_.Line
-            }
-
           if ($renderedText -notmatch [regex]::Escape($expectedBackend)) {
-            throw "Rendered Dev backend image does not match GitHub SHA."
+            throw "Rendered Dev backend image does not match Git SHA."
           }
 
           if ($renderedText -notmatch [regex]::Escape($expectedFrontend)) {
-            throw "Rendered Dev frontend image does not match GitHub SHA."
+            throw "Rendered Dev frontend image does not match Git SHA."
           }
 
           Write-Host ""
-          Write-Host "Dev backend Kustomize image: PASS"
-          Write-Host "Dev frontend Kustomize image: PASS"
+          Write-Host "Dev backend image: PASS"
+          Write-Host "Dev frontend image: PASS"
           Write-Host "Dev rendered image verification: PASS"
 
 
@@ -520,7 +449,7 @@ jobs:
           $changeCause = "Git commit $env:GITHUB_SHA"
 
           Write-Host "========================================"
-          Write-Host "DEPLOY DEV WITH KUSTOMIZE"
+          Write-Host "DEPLOY DEV"
           Write-Host "========================================"
 
           & $kubectl apply -k .\k8s\overlays\dev
@@ -529,15 +458,9 @@ jobs:
             throw "Dev Kustomize deployment failed."
           }
 
-          # Mark Dev deployment as started.
           Add-Content `
             -Path $env:GITHUB_ENV `
             -Value "DEV_DEPLOY_STARTED=true"
-
-          Write-Host "Dev Kustomize apply: PASS"
-
-          Write-Host ""
-          Write-Host "Recording rollout change cause..."
 
           & $kubectl annotate `
             deployment/backend-deployment `
@@ -559,7 +482,7 @@ jobs:
             throw "Failed to annotate Dev frontend deployment."
           }
 
-          Write-Host "Dev change cause annotation: PASS"
+          Write-Host "Dev deployment: PASS"
 
 
       # ========================================================
@@ -575,13 +498,6 @@ jobs:
 
           $namespace = "digital-banking-dev"
 
-          Write-Host "========================================"
-          Write-Host "DEV ROLLOUT"
-          Write-Host "========================================"
-
-          Write-Host ""
-          Write-Host "Waiting for backend..."
-
           & $kubectl rollout status `
             deployment/backend-deployment `
             -n $namespace `
@@ -590,11 +506,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Dev backend rollout failed."
           }
-
-          Write-Host "Dev backend rollout: PASS"
-
-          Write-Host ""
-          Write-Host "Waiting for frontend..."
 
           & $kubectl rollout status `
             deployment/frontend-deployment `
@@ -605,7 +516,7 @@ jobs:
             throw "Dev frontend rollout failed."
           }
 
-          Write-Host "Dev frontend rollout: PASS"
+          Write-Host "Dev rollout: PASS"
 
 
       # ========================================================
@@ -623,15 +534,17 @@ jobs:
 
           $namespace = "digital-banking-dev"
 
-          $expectedBackend = "ghcr.io/nutnoiz/digital-banking-api:$env:GITHUB_SHA"
-          $expectedFrontend = "ghcr.io/nutnoiz/digital-banking-web:$env:GITHUB_SHA"
+          $expectedBackend =
+            "ghcr.io/nutnoiz/digital-banking-api:$env:GITHUB_SHA"
+
+          $expectedFrontend =
+            "ghcr.io/nutnoiz/digital-banking-web:$env:GITHUB_SHA"
+
 
           Write-Host "========================================"
-          Write-Host "DEV DEPLOYMENT VERIFICATION"
+          Write-Host "VERIFY DEV"
           Write-Host "========================================"
 
-          Write-Host ""
-          Write-Host "Deployments:"
 
           & $kubectl get deployments -n $namespace
 
@@ -639,8 +552,6 @@ jobs:
             throw "Failed to get Dev deployments."
           }
 
-          Write-Host ""
-          Write-Host "Pods:"
 
           & $kubectl get pods -n $namespace
 
@@ -648,8 +559,6 @@ jobs:
             throw "Failed to get Dev pods."
           }
 
-          Write-Host ""
-          Write-Host "Services:"
 
           & $kubectl get services -n $namespace
 
@@ -657,12 +566,6 @@ jobs:
             throw "Failed to get Dev services."
           }
 
-          # ----------------------------------------------------
-          # Backend image
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Backend image verification..."
 
           $backendImage = (
             & $kubectl get deployment backend-deployment `
@@ -670,20 +573,12 @@ jobs:
               -o jsonpath="{.spec.template.spec.containers[0].image}"
           ).Trim()
 
-          Write-Host $backendImage
-
           if ($backendImage -ne $expectedBackend) {
-            throw "Dev backend image does not match GitHub commit SHA."
+            throw "Dev backend image does not match Git SHA."
           }
 
-          Write-Host "Dev backend image verification: PASS"
+          Write-Host "Dev backend image: PASS"
 
-          # ----------------------------------------------------
-          # Frontend image
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Frontend image verification..."
 
           $frontendImage = (
             & $kubectl get deployment frontend-deployment `
@@ -691,20 +586,12 @@ jobs:
               -o jsonpath="{.spec.template.spec.containers[0].image}"
           ).Trim()
 
-          Write-Host $frontendImage
-
           if ($frontendImage -ne $expectedFrontend) {
-            throw "Dev frontend image does not match GitHub commit SHA."
+            throw "Dev frontend image does not match Git SHA."
           }
 
-          Write-Host "Dev frontend image verification: PASS"
+          Write-Host "Dev frontend image: PASS"
 
-          # ----------------------------------------------------
-          # Backend health
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Backend health..."
 
           $backendHealthRaw = & $kubectl exec `
             -n $namespace `
@@ -717,8 +604,6 @@ jobs:
 
           $backendHealth = $backendHealthRaw -join ""
 
-          Write-Host $backendHealth
-
           try {
             $backendHealthJson = $backendHealth | ConvertFrom-Json
           }
@@ -727,17 +612,11 @@ jobs:
           }
 
           if ($backendHealthJson.status -ne "UP") {
-            throw "Dev backend health status is not UP."
+            throw "Dev backend health is not UP."
           }
 
           Write-Host "Dev backend health: PASS"
 
-          # ----------------------------------------------------
-          # Frontend -> Backend
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Frontend -> Backend health..."
 
           $frontendHealthRaw = & $kubectl exec `
             -n $namespace `
@@ -750,8 +629,6 @@ jobs:
 
           $frontendHealth = $frontendHealthRaw -join ""
 
-          Write-Host $frontendHealth
-
           try {
             $frontendHealthJson = $frontendHealth | ConvertFrom-Json
           }
@@ -760,10 +637,10 @@ jobs:
           }
 
           if ($frontendHealthJson.status -ne "UP") {
-            throw "Dev frontend -> backend health status is not UP."
+            throw "Dev frontend -> backend health is not UP."
           }
 
-          Write-Host "Dev frontend -> backend verification: PASS"
+          Write-Host "Dev frontend -> backend: PASS"
 
           Write-Host ""
           Write-Host "========================================"
@@ -772,7 +649,195 @@ jobs:
 
 
       # ========================================================
-      # CONFIGURE PROD KUSTOMIZE IMAGES
+      # DEV ROLLBACK
+      # ========================================================
+
+      - name: Automatic Dev Rollback
+        if: failure() && env.DEV_DEPLOY_STARTED == 'true'
+        shell: powershell
+        run: |
+
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          $namespace = "digital-banking-dev"
+
+          Write-Host "========================================"
+          Write-Host "AUTOMATIC DEV ROLLBACK"
+          Write-Host "========================================"
+
+          if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_DEV_BACKEND_IMAGE)) {
+            throw "Previous Dev backend image is unavailable."
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_DEV_FRONTEND_IMAGE)) {
+            throw "Previous Dev frontend image is unavailable."
+          }
+
+          & $kubectl set image `
+            deployment/backend-deployment `
+            backend=$env:PREVIOUS_DEV_BACKEND_IMAGE `
+            -n $namespace
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to rollback Dev backend."
+          }
+
+          & $kubectl set image `
+            deployment/frontend-deployment `
+            frontend=$env:PREVIOUS_DEV_FRONTEND_IMAGE `
+            -n $namespace
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to rollback Dev frontend."
+          }
+
+          & $kubectl rollout status `
+            deployment/backend-deployment `
+            -n $namespace `
+            --timeout=180s
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Dev backend rollback failed."
+          }
+
+          & $kubectl rollout status `
+            deployment/frontend-deployment `
+            -n $namespace `
+            --timeout=180s
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Dev frontend rollback failed."
+          }
+
+          Write-Host "Dev automatic rollback: PASS"
+
+
+  # ============================================================
+  # DEPLOY PRODUCTION
+  # ============================================================
+
+  deploy-prod:
+    name: Deploy Production
+
+    runs-on:
+      - self-hosted
+      - docker-desktop-test
+
+    needs:
+      - deploy-dev
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    environment:
+      name: production
+
+    concurrency:
+      group: digital-banking-production
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+
+    steps:
+
+      # ========================================================
+      # CHECKOUT
+      # ========================================================
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # ========================================================
+      # KUBERNETES CONTEXT
+      # ========================================================
+
+      - name: Verify Kubernetes Context
+        shell: powershell
+        run: |
+
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          Write-Host "========================================"
+          Write-Host "PRODUCTION KUBERNETES CONTEXT"
+          Write-Host "========================================"
+
+          & $kubectl config current-context
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to read Kubernetes context."
+          }
+
+          & $kubectl get nodes
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to access Kubernetes cluster."
+          }
+
+          Write-Host "Production Kubernetes context: PASS"
+
+
+      # ========================================================
+      # CAPTURE CURRENT PROD IMAGES
+      # ========================================================
+
+      - name: Capture Current Prod Images
+        shell: powershell
+        run: |
+
+          $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
+          $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
+
+          $namespace = "digital-banking-prod"
+
+          Write-Host "========================================"
+          Write-Host "CAPTURE CURRENT PROD IMAGES"
+          Write-Host "========================================"
+
+          $backendImage = (
+            & $kubectl get deployment backend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
+
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($backendImage)) {
+            throw "Failed to capture current Prod backend image."
+          }
+
+          $frontendImage = (
+            & $kubectl get deployment frontend-deployment `
+              -n $namespace `
+              -o jsonpath="{.spec.template.spec.containers[0].image}"
+          ).Trim()
+
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($frontendImage)) {
+            throw "Failed to capture current Prod frontend image."
+          }
+
+          Write-Host ""
+          Write-Host "Previous Prod backend:"
+          Write-Host $backendImage
+
+          Write-Host ""
+          Write-Host "Previous Prod frontend:"
+          Write-Host $frontendImage
+
+          Add-Content `
+            -Path $env:GITHUB_ENV `
+            -Value "PREVIOUS_PROD_BACKEND_IMAGE=$backendImage"
+
+          Add-Content `
+            -Path $env:GITHUB_ENV `
+            -Value "PREVIOUS_PROD_FRONTEND_IMAGE=$frontendImage"
+
+          Write-Host ""
+          Write-Host "Previous Prod images captured: PASS"
+
+
+      # ========================================================
+      # CONFIGURE PROD IMAGES
       # ========================================================
 
       - name: Configure Prod Kustomize Images
@@ -781,7 +846,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: |
 
-          $prodKustomizationFile = Join-Path `
+          $file = Join-Path `
             $env:GITHUB_WORKSPACE `
             "k8s\overlays\prod\kustomization.yml"
 
@@ -792,25 +857,18 @@ jobs:
           Write-Host "CONFIGURE PROD KUSTOMIZE IMAGES"
           Write-Host "========================================"
 
-          Write-Host ""
-          Write-Host "GitHub SHA:"
-          Write-Host $env:GITHUB_SHA
-
-          if (-not (Test-Path $prodKustomizationFile)) {
+          if (-not (Test-Path $file)) {
             throw "Prod Kustomization file was not found."
           }
 
           $lines = [System.Collections.Generic.List[string]](
-            [System.IO.File]::ReadAllLines($prodKustomizationFile)
+            [System.IO.File]::ReadAllLines($file)
           )
 
           if ($lines.Count -eq 0) {
             throw "Prod Kustomization file is empty."
           }
 
-          # ----------------------------------------------------
-          # Backend
-          # ----------------------------------------------------
 
           $backendIndexes = @(
             0..($lines.Count - 1) |
@@ -835,9 +893,6 @@ jobs:
 
           $lines[$backendIndex + 1] = "    newTag: $env:GITHUB_SHA"
 
-          # ----------------------------------------------------
-          # Frontend
-          # ----------------------------------------------------
 
           $frontendIndexes = @(
             0..($lines.Count - 1) |
@@ -862,52 +917,21 @@ jobs:
 
           $lines[$frontendIndex + 1] = "    newTag: $env:GITHUB_SHA"
 
-          # ----------------------------------------------------
-          # Write
-          # ----------------------------------------------------
 
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
           [System.IO.File]::WriteAllLines(
-            $prodKustomizationFile,
+            $file,
             $lines,
             $utf8NoBom
           )
 
-          # ----------------------------------------------------
-          # Verify file
-          # ----------------------------------------------------
-
-          $updatedLines = [System.IO.File]::ReadAllLines(
-            $prodKustomizationFile
-          )
-
-          $updatedTags = @(
-            $updatedLines |
-            Where-Object {
-              $_.Trim() -eq "newTag: $env:GITHUB_SHA"
-            }
-          )
-
-          if ($updatedTags.Count -ne 2) {
-            throw "Prod Kustomization file must contain exactly two expected SHA tags, found $($updatedTags.Count)."
-          }
-
-          Write-Host ""
-          Write-Host "Prod Kustomization file updated: PASS"
-
-          # ----------------------------------------------------
-          # Render
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Rendering Prod Kustomize..."
 
           $rendered = & "C:\Program Files\Kubernetes\kubectl.exe" `
             kustomize .\k8s\overlays\prod
 
           if ($LASTEXITCODE -ne 0) {
-            throw "Prod Kustomize rendering failed after image update."
+            throw "Prod Kustomize rendering failed."
           }
 
           $renderedText = $rendered -join "`n"
@@ -915,27 +939,15 @@ jobs:
           $expectedBackend = "image: $backendName`:$env:GITHUB_SHA"
           $expectedFrontend = "image: $frontendName`:$env:GITHUB_SHA"
 
-          Write-Host ""
-          Write-Host "Rendered images:"
-
-          $rendered |
-            Select-String "image:" |
-            ForEach-Object {
-              Write-Host $_.Line
-            }
-
           if ($renderedText -notmatch [regex]::Escape($expectedBackend)) {
-            throw "Rendered Prod backend image does not match GitHub SHA."
+            throw "Rendered Prod backend image does not match Git SHA."
           }
 
           if ($renderedText -notmatch [regex]::Escape($expectedFrontend)) {
-            throw "Rendered Prod frontend image does not match GitHub SHA."
+            throw "Rendered Prod frontend image does not match Git SHA."
           }
 
-          Write-Host ""
-          Write-Host "Prod backend Kustomize image: PASS"
-          Write-Host "Prod frontend Kustomize image: PASS"
-          Write-Host "Prod rendered image verification: PASS"
+          Write-Host "Prod Kustomize image verification: PASS"
 
 
       # ========================================================
@@ -955,7 +967,7 @@ jobs:
           $changeCause = "Git commit $env:GITHUB_SHA"
 
           Write-Host "========================================"
-          Write-Host "DEPLOY PROD WITH KUSTOMIZE"
+          Write-Host "DEPLOY PRODUCTION"
           Write-Host "========================================"
 
           & $kubectl apply -k .\k8s\overlays\prod
@@ -964,15 +976,9 @@ jobs:
             throw "Prod Kustomize deployment failed."
           }
 
-          # Mark Prod deployment as started.
           Add-Content `
             -Path $env:GITHUB_ENV `
             -Value "PROD_DEPLOY_STARTED=true"
-
-          Write-Host "Prod Kustomize apply: PASS"
-
-          Write-Host ""
-          Write-Host "Recording rollout change cause..."
 
           & $kubectl annotate `
             deployment/backend-deployment `
@@ -994,7 +1000,7 @@ jobs:
             throw "Failed to annotate Prod frontend deployment."
           }
 
-          Write-Host "Prod change cause annotation: PASS"
+          Write-Host "Production deployment: PASS"
 
 
       # ========================================================
@@ -1010,13 +1016,6 @@ jobs:
 
           $namespace = "digital-banking-prod"
 
-          Write-Host "========================================"
-          Write-Host "PROD ROLLOUT"
-          Write-Host "========================================"
-
-          Write-Host ""
-          Write-Host "Waiting for backend..."
-
           & $kubectl rollout status `
             deployment/backend-deployment `
             -n $namespace `
@@ -1025,11 +1024,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Prod backend rollout failed."
           }
-
-          Write-Host "Prod backend rollout: PASS"
-
-          Write-Host ""
-          Write-Host "Waiting for frontend..."
 
           & $kubectl rollout status `
             deployment/frontend-deployment `
@@ -1040,7 +1034,7 @@ jobs:
             throw "Prod frontend rollout failed."
           }
 
-          Write-Host "Prod frontend rollout: PASS"
+          Write-Host "Production rollout: PASS"
 
 
       # ========================================================
@@ -1058,15 +1052,17 @@ jobs:
 
           $namespace = "digital-banking-prod"
 
-          $expectedBackend = "ghcr.io/nutnoiz/digital-banking-api:$env:GITHUB_SHA"
-          $expectedFrontend = "ghcr.io/nutnoiz/digital-banking-web:$env:GITHUB_SHA"
+          $expectedBackend =
+            "ghcr.io/nutnoiz/digital-banking-api:$env:GITHUB_SHA"
+
+          $expectedFrontend =
+            "ghcr.io/nutnoiz/digital-banking-web:$env:GITHUB_SHA"
+
 
           Write-Host "========================================"
-          Write-Host "PROD DEPLOYMENT VERIFICATION"
+          Write-Host "VERIFY PRODUCTION"
           Write-Host "========================================"
 
-          Write-Host ""
-          Write-Host "Deployments:"
 
           & $kubectl get deployments -n $namespace
 
@@ -1074,8 +1070,6 @@ jobs:
             throw "Failed to get Prod deployments."
           }
 
-          Write-Host ""
-          Write-Host "Pods:"
 
           & $kubectl get pods -n $namespace
 
@@ -1083,8 +1077,6 @@ jobs:
             throw "Failed to get Prod pods."
           }
 
-          Write-Host ""
-          Write-Host "Services:"
 
           & $kubectl get services -n $namespace
 
@@ -1092,12 +1084,6 @@ jobs:
             throw "Failed to get Prod services."
           }
 
-          # ----------------------------------------------------
-          # Backend image
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Backend image verification..."
 
           $backendImage = (
             & $kubectl get deployment backend-deployment `
@@ -1105,20 +1091,12 @@ jobs:
               -o jsonpath="{.spec.template.spec.containers[0].image}"
           ).Trim()
 
-          Write-Host $backendImage
-
           if ($backendImage -ne $expectedBackend) {
-            throw "Prod backend image does not match GitHub commit SHA."
+            throw "Prod backend image does not match Git SHA."
           }
 
-          Write-Host "Prod backend image verification: PASS"
+          Write-Host "Prod backend image: PASS"
 
-          # ----------------------------------------------------
-          # Frontend image
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Frontend image verification..."
 
           $frontendImage = (
             & $kubectl get deployment frontend-deployment `
@@ -1126,20 +1104,12 @@ jobs:
               -o jsonpath="{.spec.template.spec.containers[0].image}"
           ).Trim()
 
-          Write-Host $frontendImage
-
           if ($frontendImage -ne $expectedFrontend) {
-            throw "Prod frontend image does not match GitHub commit SHA."
+            throw "Prod frontend image does not match Git SHA."
           }
 
-          Write-Host "Prod frontend image verification: PASS"
+          Write-Host "Prod frontend image: PASS"
 
-          # ----------------------------------------------------
-          # Backend health
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Backend health..."
 
           $backendHealthRaw = & $kubectl exec `
             -n $namespace `
@@ -1152,8 +1122,6 @@ jobs:
 
           $backendHealth = $backendHealthRaw -join ""
 
-          Write-Host $backendHealth
-
           try {
             $backendHealthJson = $backendHealth | ConvertFrom-Json
           }
@@ -1162,17 +1130,11 @@ jobs:
           }
 
           if ($backendHealthJson.status -ne "UP") {
-            throw "Prod backend health status is not UP."
+            throw "Prod backend health is not UP."
           }
 
           Write-Host "Prod backend health: PASS"
 
-          # ----------------------------------------------------
-          # Frontend -> Backend
-          # ----------------------------------------------------
-
-          Write-Host ""
-          Write-Host "Frontend -> Backend health..."
 
           $frontendHealthRaw = & $kubectl exec `
             -n $namespace `
@@ -1185,8 +1147,6 @@ jobs:
 
           $frontendHealth = $frontendHealthRaw -join ""
 
-          Write-Host $frontendHealth
-
           try {
             $frontendHealthJson = $frontendHealth | ConvertFrom-Json
           }
@@ -1195,510 +1155,144 @@ jobs:
           }
 
           if ($frontendHealthJson.status -ne "UP") {
-            throw "Prod frontend -> backend health status is not UP."
+            throw "Prod frontend -> backend health is not UP."
           }
 
-          Write-Host "Prod frontend -> backend verification: PASS"
+          Write-Host "Prod frontend -> backend: PASS"
+
 
           Write-Host ""
           Write-Host "========================================"
-          Write-Host "PROD VERIFICATION: PASS"
+          Write-Host "PRODUCTION VERIFICATION: PASS"
           Write-Host "========================================"
 
 
       # ========================================================
-      # AUTOMATIC ROLLBACK
+      # AUTOMATIC PROD ROLLBACK
       # ========================================================
 
-      - name: Automatic Rollback
-        if: failure()
+      - name: Automatic Prod Rollback
+        if: failure() && env.PROD_DEPLOY_STARTED == 'true'
         shell: powershell
         run: |
 
           $kubectl = "C:\Program Files\Kubernetes\kubectl.exe"
           $env:KUBECONFIG = "C:\ProgramData\Kubernetes\runner-kubeconfig"
 
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $namespace = "digital-banking-prod"
 
           Write-Host "========================================"
-          Write-Host "AUTOMATIC ROLLBACK"
+          Write-Host "AUTOMATIC PROD ROLLBACK"
           Write-Host "========================================"
+
+          if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_PROD_BACKEND_IMAGE)) {
+            throw "Previous Prod backend image is unavailable."
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_PROD_FRONTEND_IMAGE)) {
+            throw "Previous Prod frontend image is unavailable."
+          }
+
 
           Write-Host ""
-          Write-Host "Deployment pipeline failed."
-          Write-Host "Checking which environments were deployed."
+          Write-Host "Rolling back backend..."
 
-          # ======================================================
-          # FUNCTION
-          # ======================================================
+          & $kubectl set image `
+            deployment/backend-deployment `
+            backend=$env:PREVIOUS_PROD_BACKEND_IMAGE `
+            -n $namespace
 
-          function Set-KustomizeImageTags {
-
-            param(
-              [Parameter(Mandatory = $true)]
-              [string]$FilePath,
-
-              [Parameter(Mandatory = $true)]
-              [string]$BackendTag,
-
-              [Parameter(Mandatory = $true)]
-              [string]$FrontendTag
-            )
-
-            if (-not (Test-Path $FilePath)) {
-              throw "Kustomization file was not found: $FilePath"
-            }
-
-            $backendName = "ghcr.io/nutnoiz/digital-banking-api"
-            $frontendName = "ghcr.io/nutnoiz/digital-banking-web"
-
-            $lines = [System.Collections.Generic.List[string]](
-              [System.IO.File]::ReadAllLines($FilePath)
-            )
-
-            if ($lines.Count -eq 0) {
-              throw "Kustomization file is empty: $FilePath"
-            }
-
-            # ----------------------------------------------------
-            # Backend
-            # ----------------------------------------------------
-
-            $backendIndexes = @(
-              0..($lines.Count - 1) |
-              Where-Object {
-                $lines[$_].Trim() -eq "- name: $backendName"
-              }
-            )
-
-            if ($backendIndexes.Count -ne 1) {
-              throw "Expected exactly one backend image definition, found $($backendIndexes.Count)."
-            }
-
-            $backendIndex = $backendIndexes[0]
-
-            if ($backendIndex + 1 -ge $lines.Count) {
-              throw "Backend image definition has no following newTag line."
-            }
-
-            if ($lines[$backendIndex + 1].Trim() -notlike "newTag:*") {
-              throw "Backend image definition is missing the expected newTag line."
-            }
-
-            $lines[$backendIndex + 1] = "    newTag: $BackendTag"
-
-            # ----------------------------------------------------
-            # Frontend
-            # ----------------------------------------------------
-
-            $frontendIndexes = @(
-              0..($lines.Count - 1) |
-              Where-Object {
-                $lines[$_].Trim() -eq "- name: $frontendName"
-              }
-            )
-
-            if ($frontendIndexes.Count -ne 1) {
-              throw "Expected exactly one frontend image definition, found $($frontendIndexes.Count)."
-            }
-
-            $frontendIndex = $frontendIndexes[0]
-
-            if ($frontendIndex + 1 -ge $lines.Count) {
-              throw "Frontend image definition has no following newTag line."
-            }
-
-            if ($lines[$frontendIndex + 1].Trim() -notlike "newTag:*") {
-              throw "Frontend image definition is missing the expected newTag line."
-            }
-
-            $lines[$frontendIndex + 1] = "    newTag: $FrontendTag"
-
-            # ----------------------------------------------------
-            # Write
-            # ----------------------------------------------------
-
-            [System.IO.File]::WriteAllLines(
-              $FilePath,
-              $lines,
-              $utf8NoBom
-            )
-
-            # ----------------------------------------------------
-            # Verify
-            # ----------------------------------------------------
-
-            $verifiedLines = [System.IO.File]::ReadAllLines(
-              $FilePath
-            )
-
-            $backendTagMatches = @(
-              $verifiedLines |
-              Where-Object {
-                $_.Trim() -eq "newTag: $BackendTag"
-              }
-            )
-
-            $frontendTagMatches = @(
-              $verifiedLines |
-              Where-Object {
-                $_.Trim() -eq "newTag: $FrontendTag"
-              }
-            )
-
-            if ($backendTagMatches.Count -ne 1) {
-              throw "Rollback backend tag verification failed."
-            }
-
-            if ($frontendTagMatches.Count -ne 1) {
-              throw "Rollback frontend tag verification failed."
-            }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to rollback Prod backend."
           }
 
-
-          # ======================================================
-          # DEV ROLLBACK
-          # ======================================================
-
-          if ($env:DEV_DEPLOY_STARTED -eq "true") {
-
-            $devKustomizationFile = Join-Path `
-              $env:GITHUB_WORKSPACE `
-              "k8s\overlays\dev\kustomization.yml"
-
-            $devNamespace = "digital-banking-dev"
-
-            Write-Host ""
-            Write-Host "========================================"
-            Write-Host "DEV ROLLBACK"
-            Write-Host "========================================"
-
-            if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_DEV_BACKEND_IMAGE)) {
-              throw "Previous Dev backend image is not available."
-            }
-
-            if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_DEV_FRONTEND_IMAGE)) {
-              throw "Previous Dev frontend image is not available."
-            }
-
-            Write-Host ""
-            Write-Host "Previous Dev backend image:"
-            Write-Host $env:PREVIOUS_DEV_BACKEND_IMAGE
-
-            Write-Host ""
-            Write-Host "Previous Dev frontend image:"
-            Write-Host $env:PREVIOUS_DEV_FRONTEND_IMAGE
-
-            $devBackendTag = (
-              $env:PREVIOUS_DEV_BACKEND_IMAGE -split ':'
-            )[-1]
-
-            $devFrontendTag = (
-              $env:PREVIOUS_DEV_FRONTEND_IMAGE -split ':'
-            )[-1]
-
-            Set-KustomizeImageTags `
-              -FilePath $devKustomizationFile `
-              -BackendTag $devBackendTag `
-              -FrontendTag $devFrontendTag
-
-            Write-Host ""
-            Write-Host "Dev Kustomization rollback configuration: PASS"
-
-            Write-Host ""
-            Write-Host "Applying Dev rollback..."
-
-            & $kubectl apply -k .\k8s\overlays\dev
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to apply Dev rollback."
-            }
-
-            Write-Host "Dev rollback apply: PASS"
-
-            Write-Host ""
-            Write-Host "Waiting for Dev backend rollback..."
-
-            & $kubectl rollout status `
-              deployment/backend-deployment `
-              -n $devNamespace `
-              --timeout=180s
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Dev backend rollback rollout failed."
-            }
-
-            Write-Host "Dev backend rollback rollout: PASS"
-
-            Write-Host ""
-            Write-Host "Waiting for Dev frontend rollback..."
-
-            & $kubectl rollout status `
-              deployment/frontend-deployment `
-              -n $devNamespace `
-              --timeout=180s
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Dev frontend rollback rollout failed."
-            }
-
-            Write-Host "Dev frontend rollback rollout: PASS"
-
-          }
-          else {
-
-            Write-Host ""
-            Write-Host "Dev deployment was not started."
-            Write-Host "Dev rollback: SKIPPED"
-          }
-
-
-          # ======================================================
-          # PROD ROLLBACK
-          # ======================================================
-
-          if ($env:PROD_DEPLOY_STARTED -eq "true") {
-
-            $prodKustomizationFile = Join-Path `
-              $env:GITHUB_WORKSPACE `
-              "k8s\overlays\prod\kustomization.yml"
-
-            $prodNamespace = "digital-banking-prod"
-
-            Write-Host ""
-            Write-Host "========================================"
-            Write-Host "PROD ROLLBACK"
-            Write-Host "========================================"
-
-            if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_PROD_BACKEND_IMAGE)) {
-              throw "Previous Prod backend image is not available."
-            }
-
-            if ([string]::IsNullOrWhiteSpace($env:PREVIOUS_PROD_FRONTEND_IMAGE)) {
-              throw "Previous Prod frontend image is not available."
-            }
-
-            Write-Host ""
-            Write-Host "Previous Prod backend image:"
-            Write-Host $env:PREVIOUS_PROD_BACKEND_IMAGE
-
-            Write-Host ""
-            Write-Host "Previous Prod frontend image:"
-            Write-Host $env:PREVIOUS_PROD_FRONTEND_IMAGE
-
-            $prodBackendTag = (
-              $env:PREVIOUS_PROD_BACKEND_IMAGE -split ':'
-            )[-1]
-
-            $prodFrontendTag = (
-              $env:PREVIOUS_PROD_FRONTEND_IMAGE -split ':'
-            )[-1]
-
-            Set-KustomizeImageTags `
-              -FilePath $prodKustomizationFile `
-              -BackendTag $prodBackendTag `
-              -FrontendTag $prodFrontendTag
-
-            Write-Host ""
-            Write-Host "Prod Kustomization rollback configuration: PASS"
-
-            Write-Host ""
-            Write-Host "Applying Prod rollback..."
-
-            & $kubectl apply -k .\k8s\overlays\prod
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to apply Prod rollback."
-            }
-
-            Write-Host "Prod rollback apply: PASS"
-
-            Write-Host ""
-            Write-Host "Waiting for Prod backend rollback..."
-
-            & $kubectl rollout status `
-              deployment/backend-deployment `
-              -n $prodNamespace `
-              --timeout=180s
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Prod backend rollback rollout failed."
-            }
-
-            Write-Host "Prod backend rollback rollout: PASS"
-
-            Write-Host ""
-            Write-Host "Waiting for Prod frontend rollback..."
-
-            & $kubectl rollout status `
-              deployment/frontend-deployment `
-              -n $prodNamespace `
-              --timeout=180s
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Prod frontend rollback rollout failed."
-            }
-
-            Write-Host "Prod frontend rollback rollout: PASS"
-
-          }
-          else {
-
-            Write-Host ""
-            Write-Host "Prod deployment was not started."
-            Write-Host "Prod rollback: SKIPPED"
-          }
-
-
-          # ======================================================
-          # ROLLBACK HEALTH VERIFICATION
-          # ======================================================
 
           Write-Host ""
-          Write-Host "========================================"
-          Write-Host "ROLLBACK HEALTH VERIFICATION"
-          Write-Host "========================================"
+          Write-Host "Rolling back frontend..."
 
+          & $kubectl set image `
+            deployment/frontend-deployment `
+            frontend=$env:PREVIOUS_PROD_FRONTEND_IMAGE `
+            -n $namespace
 
-          # ======================================================
-          # DEV HEALTH
-          # ======================================================
-
-          if ($env:DEV_DEPLOY_STARTED -eq "true") {
-
-            $devNamespace = "digital-banking-dev"
-
-            Write-Host ""
-            Write-Host "Dev backend health after rollback..."
-
-            $devBackendHealthRaw = & $kubectl exec `
-              -n $devNamespace `
-              deployment/backend-deployment `
-              -- wget -qO- http://127.0.0.1:8080/actuator/health
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Dev backend rollback health request failed."
-            }
-
-            $devBackendHealth = $devBackendHealthRaw -join ""
-
-            Write-Host $devBackendHealth
-
-            try {
-              $devBackendHealthJson = $devBackendHealth | ConvertFrom-Json
-            }
-            catch {
-              throw "Dev backend rollback health response is not valid JSON."
-            }
-
-            if ($devBackendHealthJson.status -ne "UP") {
-              throw "Dev backend health is not UP after rollback."
-            }
-
-            Write-Host "Dev backend rollback health: PASS"
-
-            Write-Host ""
-            Write-Host "Dev frontend -> backend health after rollback..."
-
-            $devFrontendHealthRaw = & $kubectl exec `
-              -n $devNamespace `
-              deployment/frontend-deployment `
-              -- wget -qO- http://127.0.0.1/api/health
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Dev frontend -> backend rollback health request failed."
-            }
-
-            $devFrontendHealth = $devFrontendHealthRaw -join ""
-
-            Write-Host $devFrontendHealth
-
-            try {
-              $devFrontendHealthJson = $devFrontendHealth | ConvertFrom-Json
-            }
-            catch {
-              throw "Dev frontend rollback health response is not valid JSON."
-            }
-
-            if ($devFrontendHealthJson.status -ne "UP") {
-              throw "Dev frontend -> backend health is not UP after rollback."
-            }
-
-            Write-Host "Dev frontend -> backend rollback health: PASS"
-
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to rollback Prod frontend."
           }
 
 
-          # ======================================================
-          # PROD HEALTH
-          # ======================================================
+          & $kubectl rollout status `
+            deployment/backend-deployment `
+            -n $namespace `
+            --timeout=180s
 
-          if ($env:PROD_DEPLOY_STARTED -eq "true") {
+          if ($LASTEXITCODE -ne 0) {
+            throw "Prod backend rollback failed."
+          }
 
-            $prodNamespace = "digital-banking-prod"
 
-            Write-Host ""
-            Write-Host "Prod backend health after rollback..."
+          & $kubectl rollout status `
+            deployment/frontend-deployment `
+            -n $namespace `
+            --timeout=180s
 
-            $prodBackendHealthRaw = & $kubectl exec `
-              -n $prodNamespace `
-              deployment/backend-deployment `
-              -- wget -qO- http://127.0.0.1:8080/actuator/health
+          if ($LASTEXITCODE -ne 0) {
+            throw "Prod frontend rollback failed."
+          }
 
-            if ($LASTEXITCODE -ne 0) {
-              throw "Prod backend rollback health request failed."
-            }
 
-            $prodBackendHealth = $prodBackendHealthRaw -join ""
+          Write-Host ""
+          Write-Host "Checking backend health after rollback..."
 
-            Write-Host $prodBackendHealth
+          $backendHealthRaw = & $kubectl exec `
+            -n $namespace `
+            deployment/backend-deployment `
+            -- wget -qO- http://127.0.0.1:8080/actuator/health
 
-            try {
-              $prodBackendHealthJson = $prodBackendHealth | ConvertFrom-Json
-            }
-            catch {
-              throw "Prod backend rollback health response is not valid JSON."
-            }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Prod backend rollback health request failed."
+          }
 
-            if ($prodBackendHealthJson.status -ne "UP") {
-              throw "Prod backend health is not UP after rollback."
-            }
+          $backendHealth = $backendHealthRaw -join ""
 
-            Write-Host "Prod backend rollback health: PASS"
+          try {
+            $backendHealthJson = $backendHealth | ConvertFrom-Json
+          }
+          catch {
+            throw "Prod backend rollback health response is not valid JSON."
+          }
 
-            Write-Host ""
-            Write-Host "Prod frontend -> backend health after rollback..."
+          if ($backendHealthJson.status -ne "UP") {
+            throw "Prod backend health is not UP after rollback."
+          }
 
-            $prodFrontendHealthRaw = & $kubectl exec `
-              -n $prodNamespace `
-              deployment/frontend-deployment `
-              -- wget -qO- http://127.0.0.1/api/health
 
-            if ($LASTEXITCODE -ne 0) {
-              throw "Prod frontend -> backend rollback health request failed."
-            }
+          Write-Host ""
+          Write-Host "Checking frontend -> backend after rollback..."
 
-            $prodFrontendHealth = $prodFrontendHealthRaw -join ""
+          $frontendHealthRaw = & $kubectl exec `
+            -n $namespace `
+            deployment/frontend-deployment `
+            -- wget -qO- http://127.0.0.1/api/health
 
-            Write-Host $prodFrontendHealth
+          if ($LASTEXITCODE -ne 0) {
+            throw "Prod frontend rollback health request failed."
+          }
 
-            try {
-              $prodFrontendHealthJson = $prodFrontendHealth | ConvertFrom-Json
-            }
-            catch {
-              throw "Prod frontend rollback health response is not valid JSON."
-            }
+          $frontendHealth = $frontendHealthRaw -join ""
 
-            if ($prodFrontendHealthJson.status -ne "UP") {
-              throw "Prod frontend -> backend health is not UP after rollback."
-            }
+          try {
+            $frontendHealthJson = $frontendHealth | ConvertFrom-Json
+          }
+          catch {
+            throw "Prod frontend rollback health response is not valid JSON."
+          }
 
-            Write-Host "Prod frontend -> backend rollback health: PASS"
-
+          if ($frontendHealthJson.status -ne "UP") {
+            throw "Prod frontend -> backend health is not UP after rollback."
           }
 
 
           Write-Host ""
           Write-Host "========================================"
-          Write-Host "AUTOMATIC ROLLBACK: PASS"
+          Write-Host "AUTOMATIC PROD ROLLBACK: PASS"
           Write-Host "========================================"
